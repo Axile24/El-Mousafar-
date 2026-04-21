@@ -1,24 +1,4 @@
-# Build des images dans Azure Container Registry (ACR), puis mise à jour des
-# Container Apps (optionnel).
-#
-# Prérequis (une fois dans Azure) :
-# - Resource group + ACR + deux Container Apps (API + Web) ou seulement API.
-# - Entra ID : application (OIDC) + fédération GitHub (repo + branche main).
-# - Accès AcrPull pour l’identité managée de chaque Container App vers l’ACR.
-#
-# Secrets GitHub (repository → Settings → Secrets) :
-#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
-#
-# Variables GitHub (Settings → Variables) :
-#   AZURE_ACR_NAME              — nom du registry (sans .azurecr.io)
-#   AZURE_RESOURCE_GROUP
-#   CONTAINER_APP_API           — nom du Container App Node (port 4000)
-#   CONTAINER_APP_WEB           — (optionnel) Container App Nginx front
-#   VITE_API_BASE               — URL publique de l’API pour le build front,
-#                                 ex. https://mousafar-api.<suffix>.azurecontainerapps.io
-#                                 (obligatoire si le front et l’API ont des hôtes différents)
-
-name: Docker → Azure (ACR + Container Apps)
+name: Deploy El Mousafar to Azure
 
 on:
   push:
@@ -32,8 +12,7 @@ permissions:
 jobs:
   build-push-deploy:
     runs-on: ubuntu-latest
-    # Définir AZURE_ACR_NAME en variable pour activer le workflow.
-    if: ${{ vars.AZURE_ACR_NAME != '' }}
+    if: ${{ vars.AZURE_ACR_NAME != '' && vars.AZURE_RESOURCE_GROUP != '' }}
 
     steps:
       - name: Checkout
@@ -49,17 +28,17 @@ jobs:
       - name: Install Container Apps extension
         run: az extension add --name containerapp --upgrade 2>/dev/null || true
 
-      - name: Build & push API (ACR Tasks)
+      - name: Build & push API image (ACR Tasks)
         run: |
           set -eux
           TAG='${{ github.sha }}'
           az acr build -r "${{ vars.AZURE_ACR_NAME }}" \
             --platform linux/amd64 \
-            -t "mousafar-api:${TAG}" \
-            -t "mousafar-api:latest" \
+            -t "el-mousafar-api:${TAG}" \
+            -t "el-mousafar-api:latest" \
             ./backend
 
-      - name: Build & push Web (ACR Tasks)
+      - name: Build & push Web image (ACR Tasks)
         run: |
           set -eux
           TAG='${{ github.sha }}'
@@ -67,11 +46,11 @@ jobs:
             --platform linux/amd64 \
             --build-arg "DEPLOY_MODE=standalone" \
             --build-arg "VITE_API_BASE=${{ vars.VITE_API_BASE }}" \
-            -t "mousafar-web:${TAG}" \
-            -t "mousafar-web:latest" \
+            -t "el-mousafar-web:${TAG}" \
+            -t "el-mousafar-web:latest" \
             ./frontend
 
-      - name: Login server (for image FQDN)
+      - name: Get ACR login server
         id: acr
         run: |
           echo "login=$(az acr show -n '${{ vars.AZURE_ACR_NAME }}' --query loginServer -o tsv)" >> "$GITHUB_OUTPUT"
@@ -79,17 +58,29 @@ jobs:
       - name: Deploy API Container App
         if: ${{ vars.CONTAINER_APP_API != '' }}
         run: |
+          set -eux
           TAG='${{ github.sha }}'
           az containerapp update \
             --name "${{ vars.CONTAINER_APP_API }}" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --image "${{ steps.acr.outputs.login }}/mousafar-api:${TAG}"
+            --image "${{ steps.acr.outputs.login }}/el-mousafar-api:${TAG}" \
+            --set-env-vars \
+              PORT=4000 \
+              SQLITE_PATH=/tmp/mousafar.sqlite \
+              PUBLIC_APP_URL="${{ vars.PUBLIC_APP_URL }}" \
+              ADMIN_INVITE_SECRET="${{ secrets.ADMIN_INVITE_SECRET }}" \
+              SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+              SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+              SMTP_USER="${{ secrets.SMTP_USER }}" \
+              SMTP_PASS="${{ secrets.SMTP_PASS }}" \
+              SMTP_FROM="${{ secrets.SMTP_FROM }}"
 
       - name: Deploy Web Container App
         if: ${{ vars.CONTAINER_APP_WEB != '' }}
         run: |
+          set -eux
           TAG='${{ github.sha }}'
           az containerapp update \
             --name "${{ vars.CONTAINER_APP_WEB }}" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --image "${{ steps.acr.outputs.login }}/mousafar-web:${TAG}"
+            --image "${{ steps.acr.outputs.login }}/el-mousafar-web:${TAG}"
