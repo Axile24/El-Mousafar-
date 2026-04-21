@@ -1,0 +1,95 @@
+# Build des images dans Azure Container Registry (ACR), puis mise à jour des
+# Container Apps (optionnel).
+#
+# Prérequis (une fois dans Azure) :
+# - Resource group + ACR + deux Container Apps (API + Web) ou seulement API.
+# - Entra ID : application (OIDC) + fédération GitHub (repo + branche main).
+# - Accès AcrPull pour l’identité managée de chaque Container App vers l’ACR.
+#
+# Secrets GitHub (repository → Settings → Secrets) :
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#
+# Variables GitHub (Settings → Variables) :
+#   AZURE_ACR_NAME              — nom du registry (sans .azurecr.io)
+#   AZURE_RESOURCE_GROUP
+#   CONTAINER_APP_API           — nom du Container App Node (port 4000)
+#   CONTAINER_APP_WEB           — (optionnel) Container App Nginx front
+#   VITE_API_BASE               — URL publique de l’API pour le build front,
+#                                 ex. https://mousafar-api.<suffix>.azurecontainerapps.io
+#                                 (obligatoire si le front et l’API ont des hôtes différents)
+
+name: Docker → Azure (ACR + Container Apps)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    # Définir AZURE_ACR_NAME en variable pour activer le workflow.
+    if: ${{ vars.AZURE_ACR_NAME != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps extension
+        run: az extension add --name containerapp --upgrade 2>/dev/null || true
+
+      - name: Build & push API (ACR Tasks)
+        run: |
+          set -eux
+          TAG='${{ github.sha }}'
+          az acr build -r "${{ vars.AZURE_ACR_NAME }}" \
+            --platform linux/amd64 \
+            -t "mousafar-api:${TAG}" \
+            -t "mousafar-api:latest" \
+            ./backend
+
+      - name: Build & push Web (ACR Tasks)
+        run: |
+          set -eux
+          TAG='${{ github.sha }}'
+          az acr build -r "${{ vars.AZURE_ACR_NAME }}" \
+            --platform linux/amd64 \
+            --build-arg "DEPLOY_MODE=standalone" \
+            --build-arg "VITE_API_BASE=${{ vars.VITE_API_BASE }}" \
+            -t "mousafar-web:${TAG}" \
+            -t "mousafar-web:latest" \
+            ./frontend
+
+      - name: Login server (for image FQDN)
+        id: acr
+        run: |
+          echo "login=$(az acr show -n '${{ vars.AZURE_ACR_NAME }}' --query loginServer -o tsv)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy API Container App
+        if: ${{ vars.CONTAINER_APP_API != '' }}
+        run: |
+          TAG='${{ github.sha }}'
+          az containerapp update \
+            --name "${{ vars.CONTAINER_APP_API }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ steps.acr.outputs.login }}/mousafar-api:${TAG}"
+
+      - name: Deploy Web Container App
+        if: ${{ vars.CONTAINER_APP_WEB != '' }}
+        run: |
+          TAG='${{ github.sha }}'
+          az containerapp update \
+            --name "${{ vars.CONTAINER_APP_WEB }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ steps.acr.outputs.login }}/mousafar-web:${TAG}"

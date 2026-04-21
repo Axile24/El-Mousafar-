@@ -1,0 +1,33 @@
+# Développement / démo local : UI sur http://localhost:8080 , API sur http://localhost:4000
+# Le front proxy /api vers le conteneur api (pas besoin de VITE_API_BASE).
+#
+# Démarrage : docker compose up --build
+# Azure : voir .github/workflows/azure-deploy.yml (build ACR + Container Apps).
+
+services:
+  api:
+    build:
+      context: ./backend
+    image: vasttrafik-reseplan-api:local
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      SQLITE_PATH: /data/mousafar.sqlite
+    volumes:
+      - api_data:/data
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ""
+        DEPLOY_MODE: compose
+    image: vasttrafik-reseplan-web:local
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  api_data:
