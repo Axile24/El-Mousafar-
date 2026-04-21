@@ -8,7 +8,7 @@ services:
   api:
     build:
       context: ./backend
-    image: vasttrafik-reseplan-api:local
+    image: el-mousafar-api:local
     ports:
       - "4000:4000"
     environment:
@@ -23,7 +23,7 @@ services:
       args:
         VITE_API_BASE: ""
         DEPLOY_MODE: compose
-    image: vasttrafik-reseplan-web:local
+    image: el-mousafar-web:local
     ports:
       - "8080:80"
     depends_on:
