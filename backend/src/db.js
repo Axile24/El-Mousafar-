@@ -1,118 +1,143 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import mysql from "mysql2/promise";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(__dirname, "..", "data");
-mkdirSync(dataDir, { recursive: true });
+const MYSQL_DATABASE = String(process.env.MYSQL_DATABASE || "el_mousafar").trim();
 
-export const dbPath = process.env.SQLITE_PATH || join(dataDir, "mousafar.sqlite");
-export const db = new Database(dbPath);
+const baseConfig = {
+  host: process.env.MYSQL_HOST || "127.0.0.1",
+  port: Number(process.env.MYSQL_PORT || 3306),
+  user: process.env.MYSQL_USER || "root",
+  password: process.env.MYSQL_PASSWORD || "",
+  namedPlaceholders: true,
+  waitForConnections: true,
+  connectionLimit: Number(process.env.MYSQL_CONNECTION_LIMIT || 10),
+  charset: "utf8mb4",
+  ...(String(process.env.MYSQL_SSL || "").toLowerCase() === "true"
+    ? { ssl: { rejectUnauthorized: true } }
+    : {}),
+};
 
-db.pragma("journal_mode = WAL");
+export const dbInfo = {
+  engine: "mysql",
+  host: baseConfig.host,
+  port: baseConfig.port,
+  user: baseConfig.user,
+  database: MYSQL_DATABASE,
+};
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  email TEXT PRIMARY KEY COLLATE NOCASE,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  email_verified INTEGER NOT NULL DEFAULT 0,
-  verify_token TEXT,
-  verify_expires INTEGER
-);
+let pool;
+let ready;
 
-CREATE TABLE IF NOT EXISTS sessions (
-  token TEXT PRIMARY KEY,
-  email TEXT NOT NULL,
-  role TEXT NOT NULL,
-  expires_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS registered_vehicles (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_email TEXT NOT NULL COLLATE NOCASE,
-  vehicle_code TEXT NOT NULL,
-  line TEXT NOT NULL,
-  vehicle_type TEXT NOT NULL DEFAULT 'bus',
-  conductor_name TEXT,
-  conductor_aftername TEXT,
-  route_start TEXT,
-  route_end TEXT,
-  seats_total INTEGER,
-  available INTEGER NOT NULL DEFAULT 1,
-  service_alert TEXT,
-  service_note TEXT,
-  destination_label TEXT,
-  departure_local TEXT,
-  arrival_local TEXT,
-  updated_at INTEGER NOT NULL,
-  UNIQUE(owner_email, vehicle_code)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-CREATE INDEX IF NOT EXISTS idx_vehicles_owner ON registered_vehicles(owner_email);
-`);
-
-/** Tables créées sans les colonnes e-mail — migration légère. */
-function migrateUsersEmailVerification() {
-  const cols = db.prepare("PRAGMA table_info(users)").all();
-  const names = new Set(cols.map((c) => c.name));
-  if (!names.has("email_verified")) {
-    db.exec(
-      "ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0"
-    );
-    db.exec("UPDATE users SET email_verified = 1");
-  }
-  if (!names.has("verify_token")) {
-    db.exec("ALTER TABLE users ADD COLUMN verify_token TEXT");
-  }
-  if (!names.has("verify_expires")) {
-    db.exec("ALTER TABLE users ADD COLUMN verify_expires INTEGER");
+async function createDatabaseIfNeeded() {
+  const bootstrap = await mysql.createConnection(baseConfig);
+  try {
+    try {
+      await bootstrap.query(
+        `CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\`
+         CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      );
+    } catch (e) {
+      // Managed MySQL users often cannot create databases. In that case the
+      // configured database must already exist, and schema creation will verify it.
+      if (e?.code !== "ER_DBACCESS_DENIED_ERROR") throw e;
+    }
+  } finally {
+    await bootstrap.end();
   }
 }
 
-migrateUsersEmailVerification();
+async function createSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      email VARCHAR(120) PRIMARY KEY,
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(20) NOT NULL,
+      created_at BIGINT NOT NULL,
+      email_verified TINYINT NOT NULL DEFAULT 1,
+      verify_token VARCHAR(255),
+      verify_expires BIGINT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 
-/** Plus de confirmation e-mail : activer tous les comptes et effacer les jetons. */
-function migrateDropEmailVerificationPending() {
-  db.prepare(
-    `UPDATE users SET email_verified = 1, verify_token = NULL, verify_expires = NULL
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token VARCHAR(128) PRIMARY KEY,
+      email VARCHAR(120) NOT NULL,
+      role VARCHAR(20) NOT NULL,
+      expires_at BIGINT NOT NULL,
+      INDEX idx_sessions_expires (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS registered_vehicles (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      owner_email VARCHAR(120) NOT NULL,
+      vehicle_code VARCHAR(64) NOT NULL,
+      line VARCHAR(64) NOT NULL,
+      vehicle_type VARCHAR(20) NOT NULL DEFAULT 'bus',
+      conductor_name VARCHAR(80),
+      conductor_aftername VARCHAR(80),
+      route_start VARCHAR(160),
+      route_end VARCHAR(160),
+      seats_total INT,
+      available TINYINT NOT NULL DEFAULT 1,
+      service_alert VARCHAR(20),
+      service_note VARCHAR(240),
+      destination_label VARCHAR(200),
+      departure_local VARCHAR(40),
+      arrival_local VARCHAR(40),
+      updated_at BIGINT NOT NULL,
+      UNIQUE KEY uniq_owner_vehicle (owner_email, vehicle_code),
+      INDEX idx_vehicles_owner (owner_email),
+      INDEX idx_vehicles_line (line)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await pool.query(
+    `UPDATE users
+     SET email_verified = 1, verify_token = NULL, verify_expires = NULL
      WHERE email_verified != 1 OR verify_token IS NOT NULL OR verify_expires IS NOT NULL`
-  ).run();
+  );
 }
 
-migrateDropEmailVerificationPending();
-
-function migrateRegisteredVehiclesOperationsFields() {
-  const cols = db.prepare("PRAGMA table_info(registered_vehicles)").all();
-  const names = new Set(cols.map((c) => c.name));
-  const add = (sql) => db.exec(sql);
-  if (!names.has("conductor_name")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN conductor_name TEXT");
+export async function initDb() {
+  if (!ready) {
+    ready = (async () => {
+      let lastError;
+      for (let attempt = 1; attempt <= 20; attempt += 1) {
+        try {
+          await createDatabaseIfNeeded();
+          pool = mysql.createPool({ ...baseConfig, database: MYSQL_DATABASE });
+          await createSchema();
+          return;
+        } catch (e) {
+          lastError = e;
+          if (pool) {
+            await pool.end().catch(() => {});
+            pool = null;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+      }
+      throw lastError;
+    })();
   }
-  if (!names.has("conductor_aftername")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN conductor_aftername TEXT");
-  }
-  if (!names.has("route_start")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN route_start TEXT");
-  }
-  if (!names.has("route_end")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN route_end TEXT");
-  }
-  if (!names.has("seats_total")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN seats_total INTEGER");
-  }
-  if (!names.has("available")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN available INTEGER NOT NULL DEFAULT 1");
-  }
-  if (!names.has("service_alert")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN service_alert TEXT");
-  }
-  if (!names.has("service_note")) {
-    add("ALTER TABLE registered_vehicles ADD COLUMN service_note TEXT");
-  }
+  return ready;
 }
 
-migrateRegisteredVehiclesOperationsFields();
+export async function query(sql, params = []) {
+  await initDb();
+  const [rows] = await pool.execute(sql, params);
+  return rows;
+}
+
+export async function get(sql, params = []) {
+  const rows = await query(sql, params);
+  return rows[0] || null;
+}
+
+export async function run(sql, params = []) {
+  await initDb();
+  const [result] = await pool.execute(sql, params);
+  return result;
+}

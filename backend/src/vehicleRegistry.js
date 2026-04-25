@@ -1,4 +1,9 @@
-import { db } from "./db.js";
+import { get, query, run } from "./db.js";
+
+const VEHICLE_COLUMNS = `id, owner_email, vehicle_code, line, vehicle_type,
+  conductor_name, conductor_aftername, route_start, route_end,
+  seats_total, available, service_alert, service_note, destination_label,
+  departure_local, arrival_local, updated_at`;
 
 function normEmail(s) {
   return String(s || "")
@@ -33,85 +38,6 @@ function alertPriority(alert) {
   return { cancelled: 4, issue: 3, delay: 2, info: 1, ok: 0 }[alert] || 0;
 }
 
-/**
- * @param {string} ownerEmail
- * @param {object} v
- */
-export function upsertRegisteredVehicle(ownerEmail, v) {
-  const owner = normEmail(ownerEmail);
-  const vehicleCode = clamp(v.vehicleCode, 64);
-  const line = clamp(v.line, 64);
-  const vehicleType =
-    String(v.vehicleType || "bus").toLowerCase() === "taxi" ? "taxi" : "bus";
-  if (!vehicleCode || !line) {
-    return { ok: false, error: "vehicleCode et line sont requis" };
-  }
-  const destinationLabel = clamp(v.destinationLabel, 200) || null;
-  const departureLocal = clamp(v.departureLocal, 40) || null;
-  const arrivalLocal = clamp(v.arrivalLocal, 40) || null;
-  const conductorName = clamp(v.conductorName, 80) || null;
-  const conductorAftername = clamp(v.conductorAftername, 80) || null;
-  const routeStart = clamp(v.routeStart, 160) || null;
-  const routeEnd = clamp(v.routeEnd, 160) || null;
-  const seatsTotal = intOrNull(v.seatsTotal);
-  const available = boolToInt(v.available);
-  const alert = serviceAlert(v.serviceAlert);
-  const serviceNote = clamp(v.serviceNote, 240) || null;
-  const now = Date.now();
-
-  const stmt = db.prepare(`
-    INSERT INTO registered_vehicles (
-      owner_email, vehicle_code, line, vehicle_type,
-      conductor_name, conductor_aftername, route_start, route_end, seats_total, available, service_alert, service_note,
-      destination_label, departure_local, arrival_local, updated_at
-    ) VALUES (@owner, @code, @line, @type, @cname, @aftername, @routeStart, @routeEnd, @seats, @available, @alert, @note, @dest, @dep, @arr, @now)
-    ON CONFLICT(owner_email, vehicle_code) DO UPDATE SET
-      line = excluded.line,
-      vehicle_type = excluded.vehicle_type,
-      conductor_name = excluded.conductor_name,
-      conductor_aftername = excluded.conductor_aftername,
-      route_start = excluded.route_start,
-      route_end = excluded.route_end,
-      seats_total = excluded.seats_total,
-      available = excluded.available,
-      service_alert = excluded.service_alert,
-      service_note = excluded.service_note,
-      destination_label = excluded.destination_label,
-      departure_local = excluded.departure_local,
-      arrival_local = excluded.arrival_local,
-      updated_at = excluded.updated_at
-  `);
-  stmt.run({
-    owner: owner,
-    code: vehicleCode,
-    line,
-    type: vehicleType,
-    cname: conductorName,
-    aftername: conductorAftername,
-    routeStart,
-    routeEnd,
-    seats: seatsTotal,
-    available,
-    alert,
-    note: serviceNote,
-    dest: destinationLabel,
-    dep: departureLocal,
-    arr: arrivalLocal,
-    now,
-  });
-
-  const row = db
-    .prepare(
-      `SELECT id, owner_email, vehicle_code, line, vehicle_type,
-              conductor_name, conductor_aftername, route_start, route_end,
-              seats_total, available, service_alert, service_note, destination_label, departure_local,
-              arrival_local, updated_at
-       FROM registered_vehicles WHERE owner_email = ? AND vehicle_code = ?`
-    )
-    .get(owner, vehicleCode);
-  return { ok: true, vehicle: rowToApi(row) };
-}
-
 function rowToApi(row) {
   if (!row) return null;
   return {
@@ -135,46 +61,101 @@ function rowToApi(row) {
   };
 }
 
-export function listVehiclesForOwner(ownerEmail) {
+export async function upsertRegisteredVehicle(ownerEmail, v) {
   const owner = normEmail(ownerEmail);
-  const rows = db
-    .prepare(
-      `SELECT id, owner_email, vehicle_code, line, vehicle_type,
-              conductor_name, conductor_aftername, route_start, route_end,
-              seats_total, available, service_alert, service_note, destination_label, departure_local,
-              arrival_local, updated_at
-       FROM registered_vehicles WHERE owner_email = ?
-       ORDER BY updated_at DESC`
+  const vehicleCode = clamp(v.vehicleCode, 64);
+  const line = clamp(v.line, 64);
+  const vehicleType =
+    String(v.vehicleType || "bus").toLowerCase() === "taxi" ? "taxi" : "bus";
+  if (!vehicleCode || !line) {
+    return { ok: false, error: "vehicleCode et line sont requis" };
+  }
+
+  const params = {
+    owner,
+    code: vehicleCode,
+    line,
+    type: vehicleType,
+    cname: clamp(v.conductorName, 80) || null,
+    aftername: clamp(v.conductorAftername, 80) || null,
+    routeStart: clamp(v.routeStart, 160) || null,
+    routeEnd: clamp(v.routeEnd, 160) || null,
+    seats: intOrNull(v.seatsTotal),
+    available: boolToInt(v.available),
+    alert: serviceAlert(v.serviceAlert),
+    note: clamp(v.serviceNote, 240) || null,
+    dest: clamp(v.destinationLabel, 200) || null,
+    dep: clamp(v.departureLocal, 40) || null,
+    arr: clamp(v.arrivalLocal, 40) || null,
+    now: Date.now(),
+  };
+
+  await run(
+    `INSERT INTO registered_vehicles (
+      owner_email, vehicle_code, line, vehicle_type,
+      conductor_name, conductor_aftername, route_start, route_end,
+      seats_total, available, service_alert, service_note,
+      destination_label, departure_local, arrival_local, updated_at
+    ) VALUES (
+      :owner, :code, :line, :type, :cname, :aftername, :routeStart, :routeEnd,
+      :seats, :available, :alert, :note, :dest, :dep, :arr, :now
     )
-    .all(owner);
+    ON DUPLICATE KEY UPDATE
+      line = VALUES(line),
+      vehicle_type = VALUES(vehicle_type),
+      conductor_name = VALUES(conductor_name),
+      conductor_aftername = VALUES(conductor_aftername),
+      route_start = VALUES(route_start),
+      route_end = VALUES(route_end),
+      seats_total = VALUES(seats_total),
+      available = VALUES(available),
+      service_alert = VALUES(service_alert),
+      service_note = VALUES(service_note),
+      destination_label = VALUES(destination_label),
+      departure_local = VALUES(departure_local),
+      arrival_local = VALUES(arrival_local),
+      updated_at = VALUES(updated_at)`,
+    params
+  );
+
+  const row = await get(
+    `SELECT ${VEHICLE_COLUMNS}
+     FROM registered_vehicles WHERE owner_email = ? AND vehicle_code = ?`,
+    [owner, vehicleCode]
+  );
+  return { ok: true, vehicle: rowToApi(row) };
+}
+
+export async function listVehiclesForOwner(ownerEmail) {
+  const rows = await query(
+    `SELECT ${VEHICLE_COLUMNS}
+     FROM registered_vehicles WHERE owner_email = ?
+     ORDER BY updated_at DESC`,
+    [normEmail(ownerEmail)]
+  );
   return rows.map(rowToApi);
 }
 
-export function listAllVehicles() {
-  const rows = db
-    .prepare(
-      `SELECT id, owner_email, vehicle_code, line, vehicle_type,
-              conductor_name, conductor_aftername, route_start, route_end,
-              seats_total, available, service_alert, service_note, destination_label, departure_local,
-              arrival_local, updated_at
-       FROM registered_vehicles ORDER BY updated_at DESC`
-    )
-    .all();
+export async function listAllVehicles() {
+  const rows = await query(
+    `SELECT ${VEHICLE_COLUMNS}
+     FROM registered_vehicles ORDER BY updated_at DESC`
+  );
   return rows.map(rowToApi);
 }
 
-export function lineIsAvailable(line) {
+export async function lineIsAvailable(line) {
   const key = String(line || "").trim();
   if (!key) return true;
-  const rows = db
-    .prepare("SELECT available FROM registered_vehicles WHERE upper(line) = upper(?)")
-    .all(key);
-  // Unknown/demo-only lines stay visible. Registered lines freeze when all buses are unavailable.
+  const rows = await query(
+    "SELECT available FROM registered_vehicles WHERE UPPER(line) = UPPER(?)",
+    [key]
+  );
   if (!rows.length) return true;
   return rows.some((r) => Number(r.available) !== 0);
 }
 
-export function getLineServiceInfo(line) {
+export async function getLineServiceInfo(line) {
   const key = String(line || "").trim();
   if (!key) {
     return {
@@ -188,13 +169,12 @@ export function getLineServiceInfo(line) {
       buses: [],
     };
   }
-  const rows = db
-    .prepare(
-      `SELECT vehicle_code, available, service_alert, service_note, route_start, route_end,
-              conductor_name, conductor_aftername, departure_local, arrival_local
-       FROM registered_vehicles WHERE upper(line) = upper(?)`
-    )
-    .all(key);
+  const rows = await query(
+    `SELECT vehicle_code, available, service_alert, service_note, route_start, route_end,
+            conductor_name, conductor_aftername, departure_local, arrival_local
+     FROM registered_vehicles WHERE UPPER(line) = UPPER(?)`,
+    [key]
+  );
   if (!rows.length) {
     return {
       line: key.toUpperCase(),
@@ -207,6 +187,7 @@ export function getLineServiceInfo(line) {
       buses: [],
     };
   }
+
   const activeCount = rows.filter((r) => Number(r.available) !== 0).length;
   const strongest = rows
     .map((r) => serviceAlert(r.service_alert))
@@ -238,39 +219,29 @@ export function getLineServiceInfo(line) {
   };
 }
 
-export function deleteVehicle(ownerEmail, id, isAdmin) {
+export async function deleteVehicle(ownerEmail, id, isAdmin) {
   const owner = normEmail(ownerEmail);
   const vid = Number(id);
   if (!Number.isFinite(vid)) return { ok: false, error: "ID invalide" };
-  const row = db
-    .prepare("SELECT owner_email FROM registered_vehicles WHERE id = ?")
-    .get(vid);
+  const row = await get("SELECT owner_email FROM registered_vehicles WHERE id = ?", [
+    vid,
+  ]);
   if (!row) return { ok: false, error: "Véhicule introuvable" };
   if (!isAdmin && normEmail(row.owner_email) !== owner) {
     return { ok: false, error: "Non autorisé" };
   }
-  db.prepare("DELETE FROM registered_vehicles WHERE id = ?").run(vid);
+  await run("DELETE FROM registered_vehicles WHERE id = ?", [vid]);
   return { ok: true };
 }
 
-/**
- * Mise à jour par identifiant SQLite — conducteur (sa ligne uniquement) ou admin (toutes).
- * @param {string|number} id
- * @param {object} patch vehicleCode, line, vehicleType, destinationLabel, departureLocal, arrivalLocal, ownerEmail (admin seulement)
- * @param {{ email: string, role: string }} actor
- */
-export function updateVehicleById(id, patch, actor) {
+export async function updateVehicleById(id, patch, actor) {
   const vid = Number(id);
   if (!Number.isFinite(vid)) return { ok: false, error: "ID invalide" };
-  const row = db
-    .prepare(
-      `SELECT id, owner_email, vehicle_code, line, vehicle_type,
-              conductor_name, conductor_aftername, route_start, route_end,
-              seats_total, available, service_alert, service_note, destination_label, departure_local,
-              arrival_local, updated_at
-       FROM registered_vehicles WHERE id = ?`
-    )
-    .get(vid);
+  const row = await get(
+    `SELECT ${VEHICLE_COLUMNS}
+     FROM registered_vehicles WHERE id = ?`,
+    [vid]
+  );
   if (!row) return { ok: false, error: "Véhicule introuvable" };
 
   const isAdmin = String(actor.role || "") === "admin";
@@ -305,82 +276,72 @@ export function updateVehicleById(id, patch, actor) {
     }
   }
 
-  const line = patch.line != null ? clamp(patch.line, 64) : row.line;
-  const vehicleType =
-    patch.vehicleType != null
-      ? String(patch.vehicleType || "bus").toLowerCase() === "taxi"
-        ? "taxi"
-        : "bus"
-      : row.vehicle_type;
-  const conductorName = Object.prototype.hasOwnProperty.call(patch, "conductorName")
-    ? clamp(patch.conductorName, 80) || null
-    : row.conductor_name;
-  const conductorAftername = Object.prototype.hasOwnProperty.call(
-    patch,
-    "conductorAftername"
-  )
-    ? clamp(patch.conductorAftername, 80) || null
-    : row.conductor_aftername;
-  const routeStart = Object.prototype.hasOwnProperty.call(patch, "routeStart")
-    ? clamp(patch.routeStart, 160) || null
-    : row.route_start;
-  const routeEnd = Object.prototype.hasOwnProperty.call(patch, "routeEnd")
-    ? clamp(patch.routeEnd, 160) || null
-    : row.route_end;
-  const seatsTotal = Object.prototype.hasOwnProperty.call(patch, "seatsTotal")
-    ? intOrNull(patch.seatsTotal)
-    : row.seats_total;
-  const available = Object.prototype.hasOwnProperty.call(patch, "available")
-    ? boolToInt(patch.available)
-    : row.available;
-  const alert = Object.prototype.hasOwnProperty.call(patch, "serviceAlert")
-    ? serviceAlert(patch.serviceAlert)
-    : serviceAlert(row.service_alert);
-  const serviceNote = Object.prototype.hasOwnProperty.call(patch, "serviceNote")
-    ? clamp(patch.serviceNote, 240) || null
-    : row.service_note;
-  const destinationLabel = Object.prototype.hasOwnProperty.call(
-    patch,
-    "destinationLabel"
-  )
-    ? (() => {
-        const t = patch.destinationLabel;
-        if (t == null || String(t).trim() === "") return null;
-        return clamp(t, 200) || null;
-      })()
-    : row.destination_label;
-  const departureLocal = Object.prototype.hasOwnProperty.call(
-    patch,
-    "departureLocal"
-  )
-    ? (() => {
-        const t = patch.departureLocal;
-        if (t == null || String(t).trim() === "") return null;
-        return clamp(t, 40) || null;
-      })()
-    : row.departure_local;
-  const arrivalLocal = Object.prototype.hasOwnProperty.call(patch, "arrivalLocal")
-    ? (() => {
-        const t = patch.arrivalLocal;
-        if (t == null || String(t).trim() === "") return null;
-        return clamp(t, 40) || null;
-      })()
-    : row.arrival_local;
+  const values = {
+    ownerEmail,
+    vehicleCode,
+    line: patch.line != null ? clamp(patch.line, 64) : row.line,
+    vehicleType:
+      patch.vehicleType != null
+        ? String(patch.vehicleType || "bus").toLowerCase() === "taxi"
+          ? "taxi"
+          : "bus"
+        : row.vehicle_type,
+    conductorName: Object.prototype.hasOwnProperty.call(patch, "conductorName")
+      ? clamp(patch.conductorName, 80) || null
+      : row.conductor_name,
+    conductorAftername: Object.prototype.hasOwnProperty.call(
+      patch,
+      "conductorAftername"
+    )
+      ? clamp(patch.conductorAftername, 80) || null
+      : row.conductor_aftername,
+    routeStart: Object.prototype.hasOwnProperty.call(patch, "routeStart")
+      ? clamp(patch.routeStart, 160) || null
+      : row.route_start,
+    routeEnd: Object.prototype.hasOwnProperty.call(patch, "routeEnd")
+      ? clamp(patch.routeEnd, 160) || null
+      : row.route_end,
+    seatsTotal: Object.prototype.hasOwnProperty.call(patch, "seatsTotal")
+      ? intOrNull(patch.seatsTotal)
+      : row.seats_total,
+    available: Object.prototype.hasOwnProperty.call(patch, "available")
+      ? boolToInt(patch.available)
+      : row.available,
+    alert: Object.prototype.hasOwnProperty.call(patch, "serviceAlert")
+      ? serviceAlert(patch.serviceAlert)
+      : serviceAlert(row.service_alert),
+    serviceNote: Object.prototype.hasOwnProperty.call(patch, "serviceNote")
+      ? clamp(patch.serviceNote, 240) || null
+      : row.service_note,
+    destinationLabel: Object.prototype.hasOwnProperty.call(
+      patch,
+      "destinationLabel"
+    )
+      ? clamp(patch.destinationLabel, 200) || null
+      : row.destination_label,
+    departureLocal: Object.prototype.hasOwnProperty.call(patch, "departureLocal")
+      ? clamp(patch.departureLocal, 40) || null
+      : row.departure_local,
+    arrivalLocal: Object.prototype.hasOwnProperty.call(patch, "arrivalLocal")
+      ? clamp(patch.arrivalLocal, 40) || null
+      : row.arrival_local,
+    now: Date.now(),
+    id: vid,
+  };
 
-  if (!vehicleCode || !line) {
+  if (!values.vehicleCode || !values.line) {
     return { ok: false, error: "vehicleCode et line sont requis" };
   }
 
   if (
-    ownerEmail !== normEmail(row.owner_email) ||
-    vehicleCode !== row.vehicle_code
+    values.ownerEmail !== normEmail(row.owner_email) ||
+    values.vehicleCode !== row.vehicle_code
   ) {
-    const clash = db
-      .prepare(
-        `SELECT id FROM registered_vehicles
-         WHERE owner_email = ? AND vehicle_code = ? AND id != ?`
-      )
-      .get(ownerEmail, vehicleCode, vid);
+    const clash = await get(
+      `SELECT id FROM registered_vehicles
+       WHERE owner_email = ? AND vehicle_code = ? AND id != ?`,
+      [values.ownerEmail, values.vehicleCode, vid]
+    );
     if (clash) {
       return {
         ok: false,
@@ -389,42 +350,32 @@ export function updateVehicleById(id, patch, actor) {
     }
   }
 
-  const now = Date.now();
-  db.prepare(
+  await run(
     `UPDATE registered_vehicles SET
-       owner_email = ?, vehicle_code = ?, line = ?, vehicle_type = ?,
-       conductor_name = ?, conductor_aftername = ?, route_start = ?, route_end = ?,
-       seats_total = ?, available = ?, service_alert = ?, service_note = ?, destination_label = ?, departure_local = ?,
-       arrival_local = ?, updated_at = ?
-     WHERE id = ?`
-  ).run(
-    ownerEmail,
-    vehicleCode,
-    line,
-    vehicleType,
-    conductorName,
-    conductorAftername,
-    routeStart,
-    routeEnd,
-    seatsTotal,
-    available,
-    alert,
-    serviceNote,
-    destinationLabel,
-    departureLocal,
-    arrivalLocal,
-    now,
-    vid
+       owner_email = :ownerEmail,
+       vehicle_code = :vehicleCode,
+       line = :line,
+       vehicle_type = :vehicleType,
+       conductor_name = :conductorName,
+       conductor_aftername = :conductorAftername,
+       route_start = :routeStart,
+       route_end = :routeEnd,
+       seats_total = :seatsTotal,
+       available = :available,
+       service_alert = :alert,
+       service_note = :serviceNote,
+       destination_label = :destinationLabel,
+       departure_local = :departureLocal,
+       arrival_local = :arrivalLocal,
+       updated_at = :now
+     WHERE id = :id`,
+    values
   );
 
-  const out = db
-    .prepare(
-      `SELECT id, owner_email, vehicle_code, line, vehicle_type,
-              conductor_name, conductor_aftername, route_start, route_end,
-              seats_total, available, service_alert, service_note, destination_label, departure_local,
-              arrival_local, updated_at
-       FROM registered_vehicles WHERE id = ?`
-    )
-    .get(vid);
+  const out = await get(
+    `SELECT ${VEHICLE_COLUMNS}
+     FROM registered_vehicles WHERE id = ?`,
+    [vid]
+  );
   return { ok: true, vehicle: rowToApi(out) };
 }

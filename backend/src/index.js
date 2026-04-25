@@ -33,7 +33,7 @@ import {
   lineIsAvailable,
   getLineServiceInfo,
 } from "./vehicleRegistry.js";
-import { dbPath } from "./db.js";
+import { dbInfo, initDb } from "./db.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -46,7 +46,7 @@ app.get("/api/health", (_req, res) => {
     ok: true,
     region: "Tizi Ouzou",
     app: "El Mousafar",
-    database: "sqlite",
+    database: dbInfo.engine,
   });
 });
 
@@ -74,7 +74,7 @@ app.get("/api/locations", async (req, res) => {
   }
 });
 
-app.get("/api/vehicle-positions", (req, res) => {
+app.get("/api/vehicle-positions", async (req, res) => {
   const lowerLeftLat = Number(req.query.lowerLeftLat);
   const lowerLeftLong = Number(req.query.lowerLeftLong);
   const upperRightLat = Number(req.query.upperRightLat);
@@ -105,16 +105,16 @@ app.get("/api/vehicle-positions", (req, res) => {
   for (const v of [...demo, ...live]) {
     const key = String(v.line || v.vehicleId || v.id || "").trim().toUpperCase();
     if (!key) continue;
-    if (!lineIsAvailable(key)) continue;
+    if (!(await lineIsAvailable(key))) continue;
     // Live GPS is appended after demo, so it replaces the demo vehicle for that line.
     byLine.set(key, v);
   }
   res.json({ vehicles: [...byLine.values()] });
 });
 
-app.post("/api/auth/register", (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
   const { email, password, role, adminInviteSecret } = req.body || {};
-  const r = registerUser({ email, password, role, adminInviteSecret });
+  const r = await registerUser({ email, password, role, adminInviteSecret });
   if (!r.ok) {
     return res.status(400).json({
       error: r.error,
@@ -123,7 +123,7 @@ app.post("/api/auth/register", (req, res) => {
         : {}),
     });
   }
-  const out = loginUser(email, password);
+  const out = await loginUser(email, password);
   if (!out.ok) {
     return res
       .status(500)
@@ -132,9 +132,9 @@ app.post("/api/auth/register", (req, res) => {
   res.json({ user: out.user, token: out.token });
 });
 
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
-  const out = loginUser(email, password);
+  const out = await loginUser(email, password);
   if (!out.ok) {
     return res.status(401).json({
       error: out.error,
@@ -143,27 +143,27 @@ app.post("/api/auth/login", (req, res) => {
   res.json({ user: out.user, token: out.token });
 });
 
-app.post("/api/auth/logout", (req, res) => {
-  logoutToken(parseBearer(req));
+app.post("/api/auth/logout", async (req, res) => {
+  await logoutToken(parseBearer(req));
   res.json({ ok: true });
 });
 
-app.get("/api/auth/me", (req, res) => {
-  const u = verifyToken(parseBearer(req));
+app.get("/api/auth/me", async (req, res) => {
+  const u = await verifyToken(parseBearer(req));
   if (!u) return res.status(401).json({ error: "Non connecté" });
   res.json({ user: u });
 });
 
-app.get("/api/admin/users", (req, res) => {
-  const u = verifyToken(parseBearer(req));
+app.get("/api/admin/users", async (req, res) => {
+  const u = await verifyToken(parseBearer(req));
   if (!u || u.role !== "admin") {
     return res.status(403).json({ error: "Administrateur uniquement" });
   }
-  res.json({ users: listUsersPublic() });
+  res.json({ users: await listUsersPublic() });
 });
 
-function requireAuthUser(req, res) {
-  const u = verifyToken(parseBearer(req));
+async function requireAuthUser(req, res) {
+  const u = await verifyToken(parseBearer(req));
   if (!u) {
     res.status(401).json({ error: "Non connecté" });
     return null;
@@ -171,8 +171,8 @@ function requireAuthUser(req, res) {
   return u;
 }
 
-/** Véhicules enregistrés (SQLite) — conducteur / admin. */
-app.post("/api/vehicles", (req, res) => {
+/** Véhicules enregistrés (MySQL) — conducteur / admin. */
+app.post("/api/vehicles", async (req, res) => {
   const ownerEmail =
     String(req.body?.ownerEmail || "").trim().toLowerCase() ||
     `${String(req.body?.conductorName || "conducteur").trim().toLowerCase()}.${String(
@@ -180,14 +180,14 @@ app.post("/api/vehicles", (req, res) => {
     )
       .trim()
       .toLowerCase()}@local`;
-  const r = upsertRegisteredVehicle(ownerEmail, req.body || {});
+  const r = await upsertRegisteredVehicle(ownerEmail, req.body || {});
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json(r.vehicle);
 });
 
 /** Mise à jour par id — conducteur (ses bus) ou administrateur (tous). */
-app.put("/api/vehicles/:id", (req, res) => {
-  const r = updateVehicleById(req.params.id, req.body || {}, {
+app.put("/api/vehicles/:id", async (req, res) => {
+  const r = await updateVehicleById(req.params.id, req.body || {}, {
     email: String(req.body?.ownerEmail || "admin@local"),
     role: "admin",
   });
@@ -195,41 +195,45 @@ app.put("/api/vehicles/:id", (req, res) => {
   res.json(r.vehicle);
 });
 
-app.get("/api/vehicles", (req, res) => {
+app.get("/api/vehicles", async (req, res) => {
   const conductorKey = String(req.query.conductorKey || "").trim().toLowerCase();
-  const list = conductorKey ? listVehiclesForOwner(conductorKey) : listAllVehicles();
+  const list = conductorKey
+    ? await listVehiclesForOwner(conductorKey)
+    : await listAllVehicles();
   res.json({ vehicles: list });
 });
 
-app.get("/api/bus-service-info", (req, res) => {
+app.get("/api/bus-service-info", async (req, res) => {
   const lines = String(req.query.lines || "")
     .split(",")
     .map((line) => line.trim())
     .filter(Boolean);
   if (lines.length) {
-    return res.json({ lines: lines.map(getLineServiceInfo) });
+    return res.json({
+      lines: await Promise.all(lines.map((line) => getLineServiceInfo(line))),
+    });
   }
   const seen = new Set();
   const infos = [];
-  for (const v of listAllVehicles()) {
+  for (const v of await listAllVehicles()) {
     const line = String(v.line || "").trim().toUpperCase();
     if (!line || seen.has(line)) continue;
     seen.add(line);
-    infos.push(getLineServiceInfo(line));
+    infos.push(await getLineServiceInfo(line));
   }
   res.json({ lines: infos.sort((a, b) => a.line.localeCompare(b.line)) });
 });
 
-app.delete("/api/vehicles/:id", (req, res) => {
-  const r = deleteVehicle("admin@local", req.params.id, true);
+app.delete("/api/vehicles/:id", async (req, res) => {
+  const r = await deleteVehicle("admin@local", req.params.id, true);
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true });
 });
 
 /** Flotte : position + métadonnées (compte Mon compte ou DRIVER_API_KEY). */
-app.post("/api/driver/heartbeat", (req, res) => {
-  if (!assertFleetAccess(req, res)) return;
-  if (!lineIsAvailable(req.body?.line)) {
+app.post("/api/driver/heartbeat", async (req, res) => {
+  if (!(await assertFleetAccess(req, res))) return;
+  if (!(await lineIsAvailable(req.body?.line))) {
     return res.status(409).json({
       error: "Ligne gelée : elle est marquée non disponible par l’administrateur.",
     });
@@ -240,8 +244,8 @@ app.post("/api/driver/heartbeat", (req, res) => {
 });
 
 /** Véhicules actifs (récent), conducteur/admin ou clé API. */
-app.get("/api/driver/vehicles", (req, res) => {
-  if (!assertFleetAccess(req, res)) return;
+app.get("/api/driver/vehicles", async (req, res) => {
+  if (!(await assertFleetAccess(req, res))) return;
   res.json({ vehicles: listLiveVehicles() });
 });
 
@@ -266,7 +270,7 @@ app.get("/api/journey-trips", async (req, res) => {
       originLabel,
       destLabel
     );
-    payload.trips = (payload.trips || []).map((trip) => {
+    payload.trips = await Promise.all((payload.trips || []).map(async (trip) => {
       const busLines = [
         ...new Set(
           (trip.legs || [])
@@ -274,8 +278,12 @@ app.get("/api/journey-trips", async (req, res) => {
             .map((leg) => String(leg.line).trim().toUpperCase())
         ),
       ];
-      const unavailableLines = busLines.filter((line) => !lineIsAvailable(line));
-      const serviceInfos = busLines.map(getLineServiceInfo);
+      const serviceInfos = await Promise.all(
+        busLines.map((line) => getLineServiceInfo(line))
+      );
+      const unavailableLines = serviceInfos
+        .filter((info) => !info.available)
+        .map((info) => info.line);
       const issueInfos = serviceInfos.filter(
         (info) => !info.available || info.serviceAlert !== "ok" || info.serviceNote
       );
@@ -288,7 +296,7 @@ app.get("/api/journey-trips", async (req, res) => {
         serviceAlert: issueInfos[0]?.serviceAlert || "ok",
         serviceNote: issueInfos[0]?.serviceNote || "",
       };
-    });
+    }));
     res.json(payload);
   } catch (e) {
     res.status(400).json({ error: String(e.message) });
@@ -322,19 +330,28 @@ app.get("/api/journey-map", async (req, res) => {
   }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`El Mousafar API (Tizi Ouzou) écoute sur le port ${PORT}`);
-  console.log(`[db] SQLite : ${dbPath}`);
-  if (fleetApiKeyConfigured()) {
-    console.log("[fleet] DRIVER_API_KEY défini (appareils embarqués autorisés).");
-  } else {
-    console.warn(
-      "[fleet] DRIVER_API_KEY absent : seuls les comptes conducteur/admin (Mon compte) peuvent envoyer des positions."
-    );
-  }
-  if (!adminInviteConfigured()) {
-    console.warn(
-      "[auth] ADMIN_INVITE_SECRET absent : aucun compte administrateur ne peut être créé via l’inscription."
-    );
-  }
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`El Mousafar API (Tizi Ouzou) écoute sur le port ${PORT}`);
+      console.log(
+        `[db] MySQL : ${dbInfo.user || ""}${dbInfo.host}:${dbInfo.port}/${dbInfo.database}`
+      );
+      if (fleetApiKeyConfigured()) {
+        console.log("[fleet] DRIVER_API_KEY défini (appareils embarqués autorisés).");
+      } else {
+        console.warn(
+          "[fleet] DRIVER_API_KEY absent : seuls les comptes conducteur/admin (Mon compte) peuvent envoyer des positions."
+        );
+      }
+      if (!adminInviteConfigured()) {
+        console.warn(
+          "[auth] ADMIN_INVITE_SECRET absent : aucun compte administrateur ne peut être créé via l’inscription."
+        );
+      }
+    });
+  })
+  .catch((e) => {
+    console.error("[db] Connexion MySQL impossible:", e);
+    process.exit(1);
+  });

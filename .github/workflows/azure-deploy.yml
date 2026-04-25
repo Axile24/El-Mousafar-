@@ -66,9 +66,14 @@ jobs:
             --image "${{ steps.acr.outputs.login }}/el-mousafar-api:${TAG}" \
             --set-env-vars \
               PORT=4000 \
-              SQLITE_PATH=/tmp/mousafar.sqlite \
               PUBLIC_APP_URL="${{ vars.PUBLIC_APP_URL }}" \
-              ADMIN_INVITE_SECRET="${{ secrets.ADMIN_INVITE_SECRET }}"
+              ADMIN_INVITE_SECRET="${{ secrets.ADMIN_INVITE_SECRET }}" \
+              MYSQL_HOST="${{ vars.MYSQL_HOST }}" \
+              MYSQL_PORT="${{ vars.MYSQL_PORT }}" \
+              MYSQL_USER="${{ vars.MYSQL_USER }}" \
+              MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
+              MYSQL_DATABASE="${{ vars.MYSQL_DATABASE }}" \
+              MYSQL_SSL="${{ vars.MYSQL_SSL }}"
 
       - name: Deploy Web Container App
         if: ${{ vars.CONTAINER_APP_WEB != '' }}

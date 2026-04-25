@@ -5,6 +5,18 @@
 # Azure : voir .github/workflows/azure-deploy.yml (build ACR + Container Apps).
 
 services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: mousafar_root
+      MYSQL_DATABASE: el_mousafar
+      MYSQL_USER: mousafar
+      MYSQL_PASSWORD: mousafar_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
   api:
     build:
       context: ./backend
@@ -13,9 +25,14 @@ services:
       - "4000:4000"
     environment:
       PORT: "4000"
-      SQLITE_PATH: /data/mousafar.sqlite
-    volumes:
-      - api_data:/data
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: mousafar
+      MYSQL_PASSWORD: mousafar_password
+      MYSQL_DATABASE: el_mousafar
+      MYSQL_SSL: "false"
+    depends_on:
+      - mysql
 
   web:
     build:
@@ -30,4 +47,4 @@ services:
       - api
 
 volumes:
-  api_data:
+  mysql_data:

@@ -10,13 +10,13 @@ export function fleetApiKeyConfigured() {
   return FLEET_API_KEY.length > 0;
 }
 
-export function assertFleetAccess(req, res) {
+export async function assertFleetAccess(req, res) {
   if (!FLEET_API_KEY) return true;
   const bearer = parseBearer(req);
   const headerKey = String(req.headers["x-driver-api-key"] || "").trim();
 
   if (bearer) {
-    const user = verifyToken(bearer);
+    const user = await verifyToken(bearer);
     if (user && (user.role === "driver" || user.role === "admin")) {
       return true;
     }

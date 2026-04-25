@@ -1,16 +1,16 @@
 /**
- * Comptes conducteur / admin — SQLite.
+ * Comptes conducteur / admin — MySQL.
  * Conducteurs et admins : compte actif dès l’inscription (pas de confirmation e-mail).
  */
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { db } from "./db.js";
+import { get, query, run } from "./db.js";
 
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const ADMIN_INVITE = String(process.env.ADMIN_INVITE_SECRET || "").trim();
 
-function purgeExpiredSessions() {
-  db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
+async function purgeExpiredSessions() {
+  await run("DELETE FROM sessions WHERE expires_at < ?", [Date.now()]);
 }
 
 function normEmail(s) {
@@ -47,8 +47,8 @@ export function parseBearer(req) {
 }
 
 /** @returns {{ ok: true } | { ok: false, error: string, adminInviteMissingOnServer?: boolean }} */
-export function registerUser({ email, password, role, adminInviteSecret }) {
-  purgeExpiredSessions();
+export async function registerUser({ email, password, role, adminInviteSecret }) {
+  await purgeExpiredSessions();
   const em = normEmail(email);
   if (!em || !em.includes("@")) {
     return { ok: false, error: "E-mail invalide" };
@@ -87,16 +87,14 @@ export function registerUser({ email, password, role, adminInviteSecret }) {
 
   if (r === "admin") {
     try {
-      db.prepare(
+      await run(
         `INSERT INTO users (email, password_hash, role, created_at, email_verified, verify_token, verify_expires)
-         VALUES (?, ?, ?, ?, 1, NULL, NULL)`
-      ).run(em, passHash, r, now);
+         VALUES (?, ?, ?, ?, 1, NULL, NULL)`,
+        [em, passHash, r, now]
+      );
     } catch (e) {
       const c = String(e?.code || "");
-      if (
-        c === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
-        c === "SQLITE_CONSTRAINT_UNIQUE"
-      ) {
+      if (c === "ER_DUP_ENTRY") {
         return { ok: false, error: "Ce compte existe déjà" };
       }
       throw e;
@@ -105,16 +103,14 @@ export function registerUser({ email, password, role, adminInviteSecret }) {
   }
 
   try {
-    db.prepare(
+    await run(
       `INSERT INTO users (email, password_hash, role, created_at, email_verified, verify_token, verify_expires)
-       VALUES (?, ?, ?, ?, 1, NULL, NULL)`
-    ).run(em, passHash, r, now);
+       VALUES (?, ?, ?, ?, 1, NULL, NULL)`,
+      [em, passHash, r, now]
+    );
   } catch (e) {
     const c = String(e?.code || "");
-    if (
-      c === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
-      c === "SQLITE_CONSTRAINT_UNIQUE"
-    ) {
+    if (c === "ER_DUP_ENTRY") {
       return { ok: false, error: "Ce compte existe déjà" };
     }
     throw e;
@@ -122,22 +118,22 @@ export function registerUser({ email, password, role, adminInviteSecret }) {
   return { ok: true };
 }
 
-export function loginUser(email, password) {
-  purgeExpiredSessions();
+export async function loginUser(email, password) {
+  await purgeExpiredSessions();
   const em = normEmail(email);
-  const row = db
-    .prepare(
-      "SELECT email, password_hash, role, email_verified FROM users WHERE email = ?"
-    )
-    .get(em);
+  const row = await get(
+    "SELECT email, password_hash, role, email_verified FROM users WHERE email = ?",
+    [em]
+  );
   if (!row || !verifyPassword(password, row.password_hash)) {
     return { ok: false, error: "E-mail ou mot de passe incorrect" };
   }
   const token = randomBytes(32).toString("hex");
   const exp = Date.now() + SESSION_MS;
-  db.prepare(
-    "INSERT INTO sessions (token, email, role, expires_at) VALUES (?, ?, ?, ?)"
-  ).run(token, row.email, row.role, exp);
+  await run(
+    "INSERT INTO sessions (token, email, role, expires_at) VALUES (?, ?, ?, ?)",
+    [token, row.email, row.role, exp]
+  );
   return {
     ok: true,
     token,
@@ -145,37 +141,32 @@ export function loginUser(email, password) {
   };
 }
 
-export function verifyToken(token) {
-  purgeExpiredSessions();
+export async function verifyToken(token) {
+  await purgeExpiredSessions();
   const t = String(token || "").trim();
   if (!t) return null;
-  const row = db
-    .prepare(
-      "SELECT email, role FROM sessions WHERE token = ? AND expires_at > ?"
-    )
-    .get(t, Date.now());
+  const row = await get(
+    "SELECT email, role FROM sessions WHERE token = ? AND expires_at > ?",
+    [t, Date.now()]
+  );
   if (!row) return null;
   return { email: row.email, role: row.role };
 }
 
-export function logoutToken(token) {
-  db.prepare("DELETE FROM sessions WHERE token = ?").run(
-    String(token || "").trim()
-  );
+export async function logoutToken(token) {
+  await run("DELETE FROM sessions WHERE token = ?", [String(token || "").trim()]);
 }
 
-export function listUsersPublic() {
-  return db
-    .prepare(
-      "SELECT email, role, email_verified, created_at FROM users ORDER BY created_at DESC"
-    )
-    .all()
-    .map((r) => ({
-      email: r.email,
-      role: r.role,
-      emailVerified: Number(r.email_verified) === 1,
-      createdAt: r.created_at,
-    }));
+export async function listUsersPublic() {
+  const rows = await query(
+    "SELECT email, role, email_verified, created_at FROM users ORDER BY created_at DESC"
+  );
+  return rows.map((r) => ({
+    email: r.email,
+    role: r.role,
+    emailVerified: Number(r.email_verified) === 1,
+    createdAt: r.created_at,
+  }));
 }
 
 export function adminInviteConfigured() {
