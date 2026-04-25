@@ -354,23 +354,7 @@ export function vehiclesAlongRoute(line, seed = 0) {
   const [la1, lo1] = line[idx + 1];
   const lat = la0 + f * (la1 - la0);
   const lon = lo0 + f * (lo1 - lo0);
-  const u2 = (u + 0.35) % 1;
-  const idx2 = Math.min(
-    line.length - 2,
-    Math.floor(u2 * (line.length - 1))
-  );
-  const f2 = u2 * (line.length - 1) - idx2;
-  const [la0b, lo0b] = line[idx2];
-  const [la1b, lo1b] = line[idx2 + 1];
-  return [
-    { id: "w15-bus-1", lat, lon, line: "W15" },
-    {
-      id: "w15-bus-2",
-      lat: la0b + f2 * (la1b - la0b),
-      lon: lo0b + f2 * (lo1b - lo0b),
-      line: "W15",
-    },
-  ];
+  return [{ id: "w15-bus-1", lat, lon, line: "W15" }];
 }
 
 function haversineKm(a, b) {

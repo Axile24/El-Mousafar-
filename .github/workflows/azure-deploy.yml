@@ -68,12 +68,7 @@ jobs:
               PORT=4000 \
               SQLITE_PATH=/tmp/mousafar.sqlite \
               PUBLIC_APP_URL="${{ vars.PUBLIC_APP_URL }}" \
-              ADMIN_INVITE_SECRET="${{ secrets.ADMIN_INVITE_SECRET }}" \
-              SMTP_HOST="${{ secrets.SMTP_HOST }}" \
-              SMTP_PORT="${{ secrets.SMTP_PORT }}" \
-              SMTP_USER="${{ secrets.SMTP_USER }}" \
-              SMTP_PASS="${{ secrets.SMTP_PASS }}" \
-              SMTP_FROM="${{ secrets.SMTP_FROM }}"
+              ADMIN_INVITE_SECRET="${{ secrets.ADMIN_INVITE_SECRET }}"
 
       - name: Deploy Web Container App
         if: ${{ vars.CONTAINER_APP_WEB != '' }}

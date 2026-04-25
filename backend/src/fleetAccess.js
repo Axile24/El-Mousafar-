@@ -11,6 +11,7 @@ export function fleetApiKeyConfigured() {
 }
 
 export function assertFleetAccess(req, res) {
+  if (!FLEET_API_KEY) return true;
   const bearer = parseBearer(req);
   const headerKey = String(req.headers["x-driver-api-key"] || "").trim();
 

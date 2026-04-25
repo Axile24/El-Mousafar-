@@ -54,11 +54,19 @@ export default function TripSuggestionList({ trips, onSelect }) {
     <div className="vt-trip-list-wrap">
       <ul className="vt-trip-list vt-trip-list--flat">
         {trips.map((trip) => (
-          <li key={trip.id} className="vt-trip-row">
+          <li
+            key={trip.id}
+            className={`vt-trip-row${
+              trip.serviceAvailable === false ? " vt-trip-row--frozen" : ""
+            }`}
+          >
             <button
               type="button"
               className="vt-trip-row__btn"
-              onClick={() => onSelect(trip)}
+              disabled={trip.serviceAvailable === false}
+              onClick={() => {
+                if (trip.serviceAvailable !== false) onSelect(trip);
+              }}
             >
               <div className="vt-trip-row__top">
                 <span className="vt-trip-row__stop">
@@ -74,11 +82,31 @@ export default function TripSuggestionList({ trips, onSelect }) {
                 </span>
               </div>
               <div className="vt-trip-row__meta">
-                Durée {trip.durationMin} min
-                {trip.roadDistanceKm != null
-                  ? ` · ${trip.roadDistanceKm} km`
-                  : ""}{" "}
-                · {trip.title}
+                {trip.serviceAvailable === false ? (
+                  <span className="vt-trip-row__offline">
+                    Bus hors service
+                    {trip.unavailableLines?.length
+                      ? ` (${trip.unavailableLines.join(", ")})`
+                      : ""}
+                  </span>
+                ) : trip.serviceAlert && trip.serviceAlert !== "ok" ? (
+                  <span className="vt-trip-row__notice">
+                    {trip.serviceAlert === "delay"
+                      ? "Retard"
+                      : trip.serviceAlert === "issue"
+                        ? "Problème signalé"
+                        : "Info bus"}
+                    {trip.serviceNote ? ` : ${trip.serviceNote}` : ""}
+                  </span>
+                ) : (
+                  <>
+                    Durée {trip.durationMin} min
+                    {trip.roadDistanceKm != null
+                      ? ` · ${trip.roadDistanceKm} km`
+                      : ""}{" "}
+                    · {trip.title}
+                  </>
+                )}
               </div>
               <Sparkline tripId={trip.id} legs={trip.legs} />
             </button>

@@ -1,8 +1,12 @@
 node_modules
 dist
 .env
+.env.local
 .DS_Store
+Thumbs.db
 *.log
+coverage
+frontend/.vite
 backend/data/*.sqlite
 backend/data/*.sqlite-shm
 backend/data/*.sqlite-wal

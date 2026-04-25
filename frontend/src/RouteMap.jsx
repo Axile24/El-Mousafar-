@@ -1,46 +1,25 @@
-import { useRef, useEffect, useMemo } from "react";
-import Map, { Marker, Source, Layer } from "react-map-gl/maplibre";
-import maplibregl from "maplibre-gl";
+import { useMemo, useState } from "react";
 
-const TRANSPORT_BASEMAP_STYLE = {
-  version: 8,
-  sources: {
-    carto_voyager: {
-      type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      attribution: "© OpenStreetMap contributors © CARTO",
-    },
-  },
-  layers: [
-    {
-      id: "carto_voyager",
-      type: "raster",
-      source: "carto_voyager",
-      minzoom: 0,
-      maxzoom: 22,
-    },
-  ],
+const DEFAULT_BOUNDS = {
+  minLat: 36.58,
+  maxLat: 36.83,
+  minLon: 3.85,
+  maxLon: 4.25,
 };
 
-const DEFAULT_VIEW = {
-  longitude: 4.045,
-  latitude: 36.715,
-  zoom: 10.35,
-  pitch: 0,
-  bearing: 0,
-};
+const FALLBACK_LINE_COLORS = [
+  "#c4151c",
+  "#0073c7",
+  "#e69500",
+  "#16803c",
+  "#7d3fc7",
+  "#008c8c",
+];
 
 function wireMapLabel(text, role) {
   const s = String(text || "").trim();
-  if (role === "origin" && s.length > 3) {
-    return `${s.slice(0, 2)}.`;
-  }
-  return s || "…";
+  if (role === "origin" && s.length > 3) return `${s.slice(0, 2)}.`;
+  return s || "...";
 }
 
 function vehicleMarkerTitle(v) {
@@ -63,14 +42,6 @@ function vehicleMarkerTitle(v) {
   return parts.join(" · ");
 }
 
-function routeSourceKey(positions) {
-  if (!positions.length) return "";
-  const a = positions[0];
-  const z = positions[positions.length - 1];
-  const mid = positions[Math.floor(positions.length / 2)] || a;
-  return `${positions.length}-${a[0]},${a[1]}-${mid[0]},${mid[1]}-${z[0]},${z[1]}`;
-}
-
 function positionsFromLine(line) {
   return Array.isArray(line) ? line.map(([lat, lon]) => [lat, lon]) : [];
 }
@@ -84,6 +55,189 @@ function positionsFromLegs(routeLegs) {
   );
 }
 
+function validPoint(lat, lon) {
+  return Number.isFinite(lat) && Number.isFinite(lon);
+}
+
+function padBounds(bounds, ratio = 0.06) {
+  const latSpan = Math.max(0.01, bounds.maxLat - bounds.minLat);
+  const lonSpan = Math.max(0.01, bounds.maxLon - bounds.minLon);
+  return {
+    minLat: bounds.minLat - latSpan * ratio,
+    maxLat: bounds.maxLat + latSpan * ratio,
+    minLon: bounds.minLon - lonSpan * ratio,
+    maxLon: bounds.maxLon + lonSpan * ratio,
+  };
+}
+
+function fitBoundsToMapAspect(bounds, targetAspect = 0.86) {
+  const latSpan = Math.max(0.01, bounds.maxLat - bounds.minLat);
+  const midLat = (bounds.minLat + bounds.maxLat) / 2;
+  const lonScale = Math.max(0.35, Math.cos((midLat * Math.PI) / 180));
+  const lonSpanKmLike = Math.max(0.01, (bounds.maxLon - bounds.minLon) * lonScale);
+  const currentAspect = lonSpanKmLike / latSpan;
+  const latMid = (bounds.minLat + bounds.maxLat) / 2;
+  const lonMid = (bounds.minLon + bounds.maxLon) / 2;
+
+  if (currentAspect > targetAspect) {
+    const neededLatSpan = lonSpanKmLike / targetAspect;
+    const d = neededLatSpan / 2;
+    return {
+      minLat: latMid - d,
+      maxLat: latMid + d,
+      minLon: bounds.minLon,
+      maxLon: bounds.maxLon,
+    };
+  }
+
+  const neededLonSpan = latSpan * targetAspect / lonScale;
+  const d = neededLonSpan / 2;
+  return {
+    minLat: bounds.minLat,
+    maxLat: bounds.maxLat,
+    minLon: lonMid - d,
+    maxLon: lonMid + d,
+  };
+}
+
+function computeBounds(points) {
+  const usable = points.filter(([lat, lon]) => validPoint(lat, lon));
+  if (!usable.length) return DEFAULT_BOUNDS;
+  const bounds = usable.reduce(
+    (acc, [lat, lon]) => ({
+      minLat: Math.min(acc.minLat, lat),
+      maxLat: Math.max(acc.maxLat, lat),
+      minLon: Math.min(acc.minLon, lon),
+      maxLon: Math.max(acc.maxLon, lon),
+    }),
+    {
+      minLat: usable[0][0],
+      maxLat: usable[0][0],
+      minLon: usable[0][1],
+      maxLon: usable[0][1],
+    }
+  );
+  return fitBoundsToMapAspect(padBounds(bounds));
+}
+
+function zoomBounds(bounds, zoomLevel) {
+  if (!zoomLevel) return bounds;
+  const factor = 0.72 ** zoomLevel;
+  const latMid = (bounds.minLat + bounds.maxLat) / 2;
+  const lonMid = (bounds.minLon + bounds.maxLon) / 2;
+  const latHalf = ((bounds.maxLat - bounds.minLat) * factor) / 2;
+  const lonHalf = ((bounds.maxLon - bounds.minLon) * factor) / 2;
+  return {
+    minLat: latMid - latHalf,
+    maxLat: latMid + latHalf,
+    minLon: lonMid - lonHalf,
+    maxLon: lonMid + lonHalf,
+  };
+}
+
+function lonToX(lon) {
+  return (lon + 180) / 360;
+}
+
+function latToY(lat) {
+  const rad = (lat * Math.PI) / 180;
+  return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2;
+}
+
+function createProjector(bounds) {
+  const x0 = lonToX(bounds.minLon);
+  const x1 = lonToX(bounds.maxLon);
+  const y0 = latToY(bounds.maxLat);
+  const y1 = latToY(bounds.minLat);
+  const dx = x1 - x0 || 1;
+  const dy = y1 - y0 || 1;
+  return ([lat, lon]) => {
+    const x = ((lonToX(lon) - x0) / dx) * 100;
+    const y = ((latToY(lat) - y0) / dy) * 100;
+    return [Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y))];
+  };
+}
+
+function linePoints(points, project) {
+  return points
+    .filter(([lat, lon]) => validPoint(lat, lon))
+    .map((p) => project(p).map((n) => n.toFixed(2)).join(","))
+    .join(" ");
+}
+
+function tileXToLon(x, z) {
+  return (x / 2 ** z) * 360 - 180;
+}
+
+function tileYToLat(y, z) {
+  const n = Math.PI - (2 * Math.PI * y) / 2 ** z;
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+
+function zoomForBounds(bounds) {
+  const lonSpan = Math.max(0.01, bounds.maxLon - bounds.minLon);
+  const latSpan = Math.max(0.01, bounds.maxLat - bounds.minLat);
+  const span = Math.max(lonSpan, latSpan);
+  if (span > 3.2) return 9;
+  if (span > 1.6) return 10;
+  if (span > 0.8) return 11;
+  if (span > 0.4) return 12;
+  if (span > 0.2) return 13;
+  if (span > 0.1) return 14;
+  return 15;
+}
+
+function tileSetForBounds(bounds) {
+  const z = zoomForBounds(bounds);
+  const scale = 2 ** z;
+  const x0 = Math.floor(lonToX(bounds.minLon) * scale);
+  const x1 = Math.floor(lonToX(bounds.maxLon) * scale);
+  const y0 = Math.floor(latToY(bounds.maxLat) * scale);
+  const y1 = Math.floor(latToY(bounds.minLat) * scale);
+  const tiles = [];
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      tiles.push({ x, y, z });
+    }
+  }
+  return {
+    tiles,
+    x0,
+    y0,
+    xCount: Math.max(1, x1 - x0 + 1),
+    yCount: Math.max(1, y1 - y0 + 1),
+    bounds: {
+      minLon: tileXToLon(x0, z),
+      maxLon: tileXToLon(x1 + 1, z),
+      maxLat: tileYToLat(y0, z),
+      minLat: tileYToLat(y1 + 1, z),
+    },
+  };
+}
+
+function normalizeLine(s) {
+  return String(s || "").trim().toUpperCase();
+}
+
+function colorForLine(lineName, lineColors) {
+  const key = normalizeLine(lineName);
+  if (lineColors.has(key)) return lineColors.get(key);
+  let hash = 0;
+  for (const ch of key || "BUS") {
+    hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  }
+  return FALLBACK_LINE_COLORS[hash % FALLBACK_LINE_COLORS.length];
+}
+
+function choosePrimaryVehicle(vehicles) {
+  const usable = (vehicles || []).filter((v) =>
+    validPoint(Number(v.lat), Number(v.lon))
+  );
+  if (!usable.length) return [];
+  const live = usable.find((v) => v.source === "driver");
+  return [live || usable[0]];
+}
+
 export default function RouteMap({
   line,
   routeLegs,
@@ -92,9 +246,7 @@ export default function RouteMap({
   vehicles,
   variant = "default",
 }) {
-  const mapRef = useRef(null);
-  const wrapRef = useRef(null);
-
+  const [zoomLevel, setZoomLevel] = useState(0);
   const positions = useMemo(() => {
     if (Array.isArray(routeLegs) && routeLegs.length) {
       return positionsFromLegs(routeLegs);
@@ -102,86 +254,28 @@ export default function RouteMap({
     return positionsFromLine(line);
   }, [routeLegs, line]);
 
-  const routeGeo = useMemo(() => {
-    if (!positions.length) return null;
-    return {
-      type: "Feature",
-      properties: {},
-      geometry: {
-        type: "LineString",
-        coordinates: positions.map(([lat, lng]) => [lng, lat]),
-      },
-    };
-  }, [positions]);
+  const bounds = useMemo(() => {
+    const markerPoints = (markers || []).map((m) => [Number(m.lat), Number(m.lon)]);
+    const vehiclePoints = choosePrimaryVehicle(vehicles).map((v) => [
+      Number(v.lat),
+      Number(v.lon),
+    ]);
+    return computeBounds([...positions, ...markerPoints, ...vehiclePoints]);
+  }, [positions, markers, vehicles]);
 
-  const routeKey = useMemo(() => {
-    if (routeLegs?.length) {
-      return routeLegs
-        .map((l, i) => `${l.id}-${i}-${l.coordinates?.length}-${l.mode}`)
-        .join("|");
+  const viewBounds = useMemo(() => zoomBounds(bounds, zoomLevel), [bounds, zoomLevel]);
+  const tileSet = useMemo(() => tileSetForBounds(viewBounds), [viewBounds]);
+  const project = useMemo(() => createProjector(tileSet.bounds), [tileSet]);
+  const visibleVehicles = useMemo(() => choosePrimaryVehicle(vehicles), [vehicles]);
+  const lineColors = useMemo(() => {
+    const map = new Map();
+    for (const leg of routeLegs || []) {
+      if (leg?.mode !== "bus") continue;
+      const key = normalizeLine(leg.line);
+      if (key && leg.color) map.set(key, leg.color);
     }
-    return routeSourceKey(positions);
-  }, [routeLegs, positions]);
-
-  useEffect(() => {
-    const map = mapRef.current?.getMap?.();
-    if (!map) return undefined;
-
-    const fitRoute = () => {
-      if (!map.isStyleLoaded() || !positions.length) return;
-
-      const b = new maplibregl.LngLatBounds();
-      positions.forEach(([lat, lng]) => {
-        b.extend([lng, lat]);
-      });
-      (markers || []).forEach((m) => {
-        if (
-          m?.lat != null &&
-          m?.lon != null &&
-          Number.isFinite(m.lat) &&
-          Number.isFinite(m.lon)
-        ) {
-          b.extend([m.lon, m.lat]);
-        }
-      });
-
-      const pad =
-        variant === "detail"
-          ? { top: 56, bottom: 12, left: 14, right: 14 }
-          : { top: 20, bottom: 28, left: 18, right: 18 };
-
-      map.fitBounds(b, {
-        padding: pad,
-        maxZoom: variant === "detail" ? 15.5 : 16.75,
-        duration: 750,
-        pitch: 0,
-        bearing: 0,
-        essential: true,
-      });
-    };
-
-    if (map.isStyleLoaded()) {
-      fitRoute();
-    } else {
-      map.once("load", fitRoute);
-    }
-
-    return () => {
-      map.off("load", fitRoute);
-    };
-  }, [routeKey, positions, markers, variant]);
-
-  useEffect(() => {
-    const el = wrapRef.current;
-    const map = mapRef.current?.getMap?.();
-    if (!el || !map) return undefined;
-    const ro = new ResizeObserver(() => {
-      map.resize();
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
+    return map;
+  }, [routeLegs]);
   const hasRoute = positions.length >= 2;
   const useLegs = Array.isArray(routeLegs) && routeLegs.length > 0;
 
@@ -189,138 +283,131 @@ export default function RouteMap({
     variant === "detail" ? "map-block map-block--detail" : "map-block";
   const mapWrapClass =
     variant === "detail"
-      ? "map-wrap map-wrap--wire map-wrap--gl map-wrap--detail"
-      : "map-wrap map-wrap--wire map-wrap--gl";
+      ? "map-wrap map-wrap--wire map-wrap--simple map-wrap--detail"
+      : "map-wrap map-wrap--wire map-wrap--simple";
 
   return (
-    <div className={mapBlockClass} ref={wrapRef}>
+    <div className={mapBlockClass}>
       <div className={mapWrapClass}>
-        <Map
-          ref={mapRef}
-          mapLib={maplibregl}
-          initialViewState={DEFAULT_VIEW}
-          mapStyle={TRANSPORT_BASEMAP_STYLE}
-          style={{ width: "100%", height: "100%" }}
-          attributionControl={{ compact: true }}
-          reuseMaps
-        >
-          {hasRoute &&
-            useLegs &&
-            routeLegs.map((leg, idx) => {
-              const pos = positionsFromLine(leg.coordinates);
-              if (pos.length < 2) return null;
-              const geo = {
-                type: "Feature",
-                properties: {},
-                geometry: {
-                  type: "LineString",
-                  coordinates: pos.map(([lat, lng]) => [lng, lat]),
-                },
-              };
-              const isBus = leg.mode === "bus";
-              const color = isBus ? leg.color || "#111" : "#4a4a4a";
-              const paint = {
-                "line-color": color,
-                "line-width": isBus ? 7 : 5,
-                "line-opacity": isBus ? 1 : 0.88,
-                ...(leg.dashed ? { "line-dasharray": [0.35, 2] } : {}),
-              };
-              return (
-                <Source
-                  key={`${leg.id}-${idx}`}
-                  id={`leg-${idx}`}
-                  type="geojson"
-                  data={geo}
-                >
-                  <Layer
-                    id={`leg-line-${idx}`}
-                    type="line"
-                    layout={{
-                      "line-cap": "round",
-                      "line-join": "round",
-                    }}
-                    paint={paint}
+        <div className="simple-map-controls" aria-label="Zoom carte">
+          <button
+            type="button"
+            className="simple-map-control"
+            onClick={() => setZoomLevel((z) => Math.min(3, z + 1))}
+            aria-label="Zoomer la carte"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="simple-map-control"
+            onClick={() => setZoomLevel((z) => Math.max(-2, z - 1))}
+            aria-label="Dézoomer la carte"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            className="simple-map-control simple-map-control--fit"
+            onClick={() => setZoomLevel(0)}
+            aria-label="Réajuster la carte"
+          >
+            Fit
+          </button>
+        </div>
+        <div className="simple-tile-layer" aria-hidden="true">
+          {tileSet.tiles.map((tile) => (
+            <img
+              key={`${tile.z}-${tile.x}-${tile.y}`}
+              className="simple-map-tile"
+              src={`https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`}
+              alt=""
+              draggable="false"
+              style={{
+                left: `${((tile.x - tileSet.x0) / tileSet.xCount) * 100}%`,
+                top: `${((tile.y - tileSet.y0) / tileSet.yCount) * 100}%`,
+                width: `${100 / tileSet.xCount}%`,
+                height: `${100 / tileSet.yCount}%`,
+              }}
+            />
+          ))}
+        </div>
+        <svg className="simple-map-overlay" viewBox="0 0 100 100" aria-hidden="true">
+          {hasRoute && useLegs
+            ? routeLegs.map((leg, idx) => {
+                const pts = positionsFromLine(leg.coordinates);
+                if (pts.length < 2) return null;
+                return (
+                  <polyline
+                    key={`${leg.id}-${idx}`}
+                    points={linePoints(pts, project)}
+                    className={`simple-route-line${
+                      leg.dashed ? " simple-route-line--dashed" : ""
+                    }`}
                   />
-                </Source>
-              );
-            })}
+                );
+              })
+            : null}
+          {hasRoute && !useLegs ? (
+            <polyline
+              points={linePoints(positions, project)}
+              className="simple-route-line"
+            />
+          ) : null}
+        </svg>
 
-          {hasRoute && !useLegs && routeGeo && (
-            <Source
-              id="route"
-              type="geojson"
-              data={routeGeo}
-              key={routeSourceKey(positions)}
-            >
-              <Layer
-                id="route-line"
-                type="line"
-                layout={{
-                  "line-cap": "round",
-                  "line-join": "round",
-                }}
-                paint={{
-                  "line-color": "#000000",
-                  "line-width": 6,
-                  "line-opacity": 1,
-                }}
-              />
-            </Source>
-          )}
-
-          {hasRoute &&
-            (markers || []).map((m, i) => (
-              <Marker
+        {hasRoute &&
+          (markers || []).map((m, i) => {
+            const [x, y] = project([Number(m.lat), Number(m.lon)]);
+            return (
+              <div
                 key={`m-${i}`}
-                longitude={m.lon}
-                latitude={m.lat}
-                anchor="bottom"
+                className={
+                  m.role === "destination"
+                    ? "map-label-marker map-label-marker--dest simple-map-pin"
+                    : "map-label-marker map-label-marker--origin simple-map-pin"
+                }
+                style={{ left: `${x}%`, top: `${y}%` }}
               >
-                <div
-                  className={
-                    m.role === "destination"
-                      ? "map-label-marker map-label-marker--dest"
-                      : "map-label-marker map-label-marker--origin"
-                  }
-                >
-                  {wireMapLabel(m.label || "", m.role)}
-                </div>
-              </Marker>
-            ))}
-          {hasRoute &&
-            variant !== "detail" &&
-            (stops || []).map((s, i) => (
-              <Marker
+                {wireMapLabel(m.label || "", m.role)}
+              </div>
+            );
+          })}
+
+        {hasRoute &&
+          variant !== "detail" &&
+          (stops || []).map((s, i) => {
+            const [x, y] = project([Number(s.lat), Number(s.lon)]);
+            return (
+              <div
                 key={`s-${i}`}
-                longitude={s.lon}
-                latitude={s.lat}
-                anchor="center"
+                className="stop-badge simple-stop-pin"
+                style={{ left: `${x}%`, top: `${y}%` }}
               >
-                <div className="stop-badge">3</div>
-              </Marker>
-            ))}
-          {hasRoute &&
-            (vehicles || []).map((v) => (
-              <Marker
+                3
+              </div>
+            );
+          })}
+
+        {hasRoute &&
+          visibleVehicles.map((v) => {
+            const [x, y] = project([Number(v.lat), Number(v.lon)]);
+            return (
+              <div
                 key={v.id}
-                longitude={v.lon}
-                latitude={v.lat}
-                anchor="center"
-              >
-                <div
-                  className={`vehicle-marker${
-                    v.available === false ? " vehicle-marker--offline" : ""
-                  }`}
-                  title={vehicleMarkerTitle(v)}
-                >
-                  <span className="vehicle-marker-bus" aria-hidden="true">
-                    {v.vehicleType === "taxi" ? "🚕" : "🚌"}
-                  </span>
-                  <span className="vehicle-marker-line">{v.line || "?"}</span>
-                </div>
-              </Marker>
-            ))}
-        </Map>
+                className={`vehicle-marker vehicle-marker--dot simple-vehicle-pin${
+                  v.vehicleType === "taxi" ? " vehicle-marker--taxi" : ""
+                }${v.available === false ? " vehicle-marker--offline" : ""}`}
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  backgroundColor: colorForLine(v.line, lineColors),
+                }}
+                title={vehicleMarkerTitle(v)}
+                aria-label={vehicleMarkerTitle(v)}
+              />
+            );
+          })}
       </div>
     </div>
   );

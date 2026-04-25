@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import RouteMap from "./RouteMap.jsx";
 import Reklam from "./Reklam.jsx";
 import TripSuggestionList from "./TripSuggestionList.jsx";
@@ -24,6 +24,66 @@ function useDebounced(value, ms) {
   return d;
 }
 
+function serviceAlertLabel(alert) {
+  return {
+    ok: "Service normal",
+    info: "Information",
+    delay: "Retard",
+    issue: "Problème signalé",
+    cancelled: "Bus hors service",
+  }[alert || "ok"];
+}
+
+function serviceAlertClass(alert) {
+  return ["delay", "issue", "cancelled"].includes(alert)
+    ? ` vt-bus-info__status--${alert}`
+    : "";
+}
+
+function servicePriority(alert) {
+  return { cancelled: 4, issue: 3, delay: 2, info: 1, ok: 0 }[alert] || 0;
+}
+
+function buildBusInfoFromVehicles(vehicles, visibleLines) {
+  const wanted = new Set(visibleLines.map((line) => line.toUpperCase()));
+  const byLine = new Map();
+  for (const vehicle of vehicles || []) {
+    const line = String(vehicle.line || "").trim().toUpperCase();
+    if (!line || (wanted.size && !wanted.has(line))) continue;
+    const row = byLine.get(line) || {
+      line,
+      registered: true,
+      available: false,
+      busCount: 0,
+      activeCount: 0,
+      serviceAlert: "ok",
+      serviceNote: "",
+      buses: [],
+    };
+    const alert = vehicle.available === false ? "cancelled" : vehicle.serviceAlert || "ok";
+    row.busCount += 1;
+    if (vehicle.available !== false) row.activeCount += 1;
+    if (servicePriority(alert) > servicePriority(row.serviceAlert)) {
+      row.serviceAlert = alert;
+    }
+    if (!row.serviceNote && vehicle.serviceNote) row.serviceNote = vehicle.serviceNote;
+    row.buses.push(vehicle);
+    byLine.set(line, row);
+  }
+  return [...byLine.values()]
+    .map((line) => ({
+      ...line,
+      available: line.activeCount > 0,
+      serviceAlert: line.activeCount > 0 ? line.serviceAlert : "cancelled",
+      serviceNote:
+        line.serviceNote ||
+        (line.activeCount > 0
+          ? ""
+          : "Bus non disponible pour le moment."),
+    }))
+    .sort((a, b) => a.line.localeCompare(b.line));
+}
+
 export default function App() {
   const [originText, setOriginText] = useState("");
   const [destText, setDestText] = useState("");
@@ -34,11 +94,22 @@ export default function App() {
   const [tripBundle, setTripBundle] = useState(null);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [vehicles, setVehicles] = useState([]);
+  const [busInfoOpen, setBusInfoOpen] = useState(false);
+  const [busInfoLines, setBusInfoLines] = useState([]);
+  const [busInfoLoading, setBusInfoLoading] = useState(false);
+  const [busInfoError, setBusInfoError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const debOrigin = useDebounced(originText, 280);
   const debDest = useDebounced(destText, 280);
+
+  /** Layout carte : avant peinture pour éviter une frame sans hauteur. */
+  useLayoutEffect(() => {
+    const tripOpen = Boolean(selectedTrip && tripBundle);
+    document.documentElement.classList.toggle("vt-trip-page", tripOpen);
+    return () => document.documentElement.classList.remove("vt-trip-page");
+  }, [selectedTrip, tripBundle]);
 
   const fetchSuggestions = useCallback(async (q, which) => {
     const t = q.trim();
@@ -173,6 +244,36 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  async function loadBusInfo() {
+    setBusInfoError("");
+    setBusInfoLoading(true);
+    const lines = [
+      ...new Set(
+        (tripBundle?.trips || [])
+          .flatMap((trip) => trip.busLines || [])
+          .map((line) => String(line).trim())
+          .filter(Boolean)
+      ),
+    ];
+    try {
+      const data = await fetchApiJson(apiUrl("/api/vehicles"));
+      setBusInfoLines(buildBusInfoFromVehicles(data.vehicles || [], lines));
+    } catch {
+      setBusInfoError(
+        "Impossible de charger les infos écrites par les conducteurs. Vérifiez que l’API est démarrée."
+      );
+      setBusInfoLines([]);
+    } finally {
+      setBusInfoLoading(false);
+    }
+  }
+
+  function toggleBusInfo() {
+    const next = !busInfoOpen;
+    setBusInfoOpen(next);
+    if (next) void loadBusInfo();
+  }
 
   useEffect(() => {
     const bounds = selectedTrip && tripBundle?.positionBounds;
@@ -338,8 +439,9 @@ export default function App() {
               <button
                 type="button"
                 className="vt-tool-btn"
-                title="Filtres (démo)"
-                aria-label="Filtres"
+                title="Infos bus"
+                aria-label="Infos bus"
+                onClick={toggleBusInfo}
               >
                 <IconSliders />
               </button>
@@ -354,6 +456,53 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {busInfoOpen ? (
+          <section className="vt-bus-info" aria-live="polite">
+            <div className="vt-bus-info__head">
+              <strong>Infos bus urgentes</strong>
+              <button type="button" onClick={() => void loadBusInfo()}>
+                Actualiser
+              </button>
+            </div>
+            {busInfoLoading ? <p>Chargement des infos bus…</p> : null}
+            {busInfoError ? <p className="vt-bus-info__error">{busInfoError}</p> : null}
+            {!busInfoLoading && !busInfoLines.length && !busInfoError ? (
+              <p>Aucune info urgente publiée pour le moment.</p>
+            ) : null}
+            {busInfoLines.length ? (
+              <ul className="vt-bus-info__list">
+                {busInfoLines.map((line) => (
+                  <li
+                    key={line.line}
+                    className={`vt-bus-info__item${
+                      line.available ? "" : " vt-bus-info__item--offline"
+                    }`}
+                  >
+                    <div className="vt-bus-info__row">
+                      <strong>Ligne {line.line}</strong>
+                      <span
+                        className={`vt-bus-info__status${serviceAlertClass(
+                          line.serviceAlert
+                        )}`}
+                      >
+                        {line.available
+                          ? serviceAlertLabel(line.serviceAlert)
+                          : "Bus hors service"}
+                      </span>
+                    </div>
+                    <p>
+                      {line.serviceNote ||
+                        (line.available
+                          ? `${line.activeCount}/${line.busCount || line.activeCount} bus en service.`
+                          : "Cette ligne est gelée par l’administrateur.")}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
 
         {originSuggestions.length > 0 && (
           <>

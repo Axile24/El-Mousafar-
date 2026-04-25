@@ -1,13 +1,12 @@
 /**
  * Comptes conducteur / admin — SQLite.
- * Conducteurs : inscription puis confirmation e-mail avant connexion.
+ * Conducteurs et admins : compte actif dès l’inscription (pas de confirmation e-mail).
  */
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { db } from "./db.js";
 
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
-const VERIFY_MS = 48 * 60 * 60 * 1000;
 const ADMIN_INVITE = String(process.env.ADMIN_INVITE_SECRET || "").trim();
 
 function purgeExpiredSessions() {
@@ -47,9 +46,7 @@ export function parseBearer(req) {
   return h.startsWith("Bearer ") ? h.slice(7).trim() : "";
 }
 
-/**
- * @returns {{ ok: true, needsVerification: false } | { ok: true, needsVerification: true, email: string, verifyToken: string } | { ok: false, error: string }}
- */
+/** @returns {{ ok: true } | { ok: false, error: string, adminInviteMissingOnServer?: boolean }} */
 export function registerUser({ email, password, role, adminInviteSecret }) {
   purgeExpiredSessions();
   const em = normEmail(email);
@@ -104,16 +101,14 @@ export function registerUser({ email, password, role, adminInviteSecret }) {
       }
       throw e;
     }
-    return { ok: true, needsVerification: false };
+    return { ok: true };
   }
 
-  const verifyTok = randomBytes(32).toString("hex");
-  const verifyExp = now + VERIFY_MS;
   try {
     db.prepare(
       `INSERT INTO users (email, password_hash, role, created_at, email_verified, verify_token, verify_expires)
-       VALUES (?, ?, ?, ?, 0, ?, ?)`
-    ).run(em, passHash, r, now, verifyTok, verifyExp);
+       VALUES (?, ?, ?, ?, 1, NULL, NULL)`
+    ).run(em, passHash, r, now);
   } catch (e) {
     const c = String(e?.code || "");
     if (
@@ -124,7 +119,7 @@ export function registerUser({ email, password, role, adminInviteSecret }) {
     }
     throw e;
   }
-  return { ok: true, needsVerification: true, email: em, verifyToken: verifyTok };
+  return { ok: true };
 }
 
 export function loginUser(email, password) {
@@ -138,14 +133,6 @@ export function loginUser(email, password) {
   if (!row || !verifyPassword(password, row.password_hash)) {
     return { ok: false, error: "E-mail ou mot de passe incorrect" };
   }
-  if (Number(row.email_verified) !== 1) {
-    return {
-      ok: false,
-      error:
-        "E-mail non confirmé. Ouvrez le lien reçu par e-mail ou demandez un nouvel envoi.",
-      needsVerification: true,
-    };
-  }
   const token = randomBytes(32).toString("hex");
   const exp = Date.now() + SESSION_MS;
   db.prepare(
@@ -156,46 +143,6 @@ export function loginUser(email, password) {
     token,
     user: { email: row.email, role: row.role },
   };
-}
-
-export function verifyEmailWithToken(token) {
-  const t = String(token || "").trim();
-  if (t.length < 16) return { ok: false, error: "Lien invalide" };
-  const now = Date.now();
-  const row = db
-    .prepare(
-      "SELECT email FROM users WHERE verify_token = ? AND verify_expires > ?"
-    )
-    .get(t, now);
-  if (!row) {
-    return { ok: false, error: "Lien invalide ou expiré. Réinscrivez-vous ou renvoyez l’e-mail." };
-  }
-  db.prepare(
-    "UPDATE users SET email_verified = 1, verify_token = NULL, verify_expires = NULL WHERE email = ?"
-  ).run(row.email);
-  return { ok: true, email: row.email };
-}
-
-export function resendVerificationEmail(email) {
-  const em = normEmail(email);
-  if (!em) return { ok: false, error: "E-mail requis" };
-  const row = db
-    .prepare(
-      "SELECT email, email_verified FROM users WHERE email = ?"
-    )
-    .get(em);
-  if (!row) {
-    return { ok: false, error: "Aucun compte avec cet e-mail" };
-  }
-  if (Number(row.email_verified) === 1) {
-    return { ok: false, error: "Ce compte est déjà confirmé" };
-  }
-  const verifyTok = randomBytes(32).toString("hex");
-  const verifyExp = Date.now() + VERIFY_MS;
-  db.prepare(
-    "UPDATE users SET verify_token = ?, verify_expires = ? WHERE email = ?"
-  ).run(verifyTok, verifyExp, em);
-  return { ok: true, email: em, verifyToken: verifyTok };
 }
 
 export function verifyToken(token) {

@@ -28,10 +28,7 @@ docker compose up --build
 
 ## Deploy to Azure Student with GitHub Actions
 
-This repo includes two workflows:
-
-1. **Bootstrap infra**: `.github/workflows/azure-bootstrap.yml`
-2. **Build + Deploy app**: `.github/workflows/azure-deploy.yml`
+This repo includes **Deploy El Mousafar to Azure** in `.github/workflows/azure-deploy.yml` (Container Apps + ACR).
 
 ### 1) Required GitHub Secrets
 
@@ -41,26 +38,8 @@ Set in **Repo -> Settings -> Secrets and variables -> Actions -> Secrets**:
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 - `ADMIN_INVITE_SECRET` (optional but recommended)
-- `SMTP_HOST` (optional)
-- `SMTP_PORT` (optional)
-- `SMTP_USER` (optional)
-- `SMTP_PASS` (optional)
-- `SMTP_FROM` (optional)
 
-### 2) Bootstrap resources
-
-Run workflow **Bootstrap Azure Student Infra** manually from Actions.
-
-It creates:
-- Resource group
-- ACR (Basic)
-- Container Apps environment
-- API + Web Container Apps
-- Managed identities + `AcrPull` role assignment
-
-At the end it prints values for GitHub Variables.
-
-### 3) Required GitHub Variables
+### 2) Required GitHub Variables
 
 Set in **Repo -> Settings -> Secrets and variables -> Actions -> Variables**:
 
@@ -71,7 +50,7 @@ Set in **Repo -> Settings -> Secrets and variables -> Actions -> Variables**:
 - `VITE_API_BASE` (API URL, e.g. `https://<api>.azurecontainerapps.io`)
 - `PUBLIC_APP_URL` (Web URL, e.g. `https://<web>.azurecontainerapps.io`)
 
-### 4) Deploy
+### 3) Deploy
 
 Push to `main` or run workflow **Deploy El Mousafar to Azure** manually.
 

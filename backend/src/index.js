@@ -1,3 +1,4 @@
+import "./loadEnv.js";
 import express from "express";
 import cors from "cors";
 import {
@@ -16,10 +17,7 @@ import {
   parseBearer,
   listUsersPublic,
   adminInviteConfigured,
-  verifyEmailWithToken,
-  resendVerificationEmail,
 } from "./authStore.js";
-import { sendSignupConfirmation } from "./mailer.js";
 import { assertFleetAccess, fleetApiKeyConfigured } from "./fleetAccess.js";
 import {
   getLiveVehiclesInBounds,
@@ -32,6 +30,8 @@ import {
   listAllVehicles,
   deleteVehicle,
   updateVehicleById,
+  lineIsAvailable,
+  getLineServiceInfo,
 } from "./vehicleRegistry.js";
 import { dbPath } from "./db.js";
 
@@ -101,10 +101,18 @@ app.get("/api/vehicle-positions", (req, res) => {
   };
   const live = getLiveVehiclesInBounds(bounds);
   const demo = vehiclesInBounds(bounds);
-  res.json({ vehicles: [...live, ...demo] });
+  const byLine = new Map();
+  for (const v of [...demo, ...live]) {
+    const key = String(v.line || v.vehicleId || v.id || "").trim().toUpperCase();
+    if (!key) continue;
+    if (!lineIsAvailable(key)) continue;
+    // Live GPS is appended after demo, so it replaces the demo vehicle for that line.
+    byLine.set(key, v);
+  }
+  res.json({ vehicles: [...byLine.values()] });
 });
 
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", (req, res) => {
   const { email, password, role, adminInviteSecret } = req.body || {};
   const r = registerUser({ email, password, role, adminInviteSecret });
   if (!r.ok) {
@@ -113,23 +121,6 @@ app.post("/api/auth/register", async (req, res) => {
       ...(r.adminInviteMissingOnServer
         ? { adminInviteMissingOnServer: true }
         : {}),
-    });
-  }
-  if (r.needsVerification) {
-    try {
-      await sendSignupConfirmation(r.email, r.verifyToken);
-    } catch (e) {
-      console.error("[mail]", e);
-      return res.status(500).json({
-        error:
-          "Impossible d’envoyer l’e-mail de confirmation. Vérifiez SMTP ou les journaux serveur.",
-      });
-    }
-    return res.status(201).json({
-      needsVerification: true,
-      email: r.email,
-      message:
-        "Un e-mail de confirmation a été envoyé. Ouvrez le lien pour activer le compte, puis connectez-vous.",
     });
   }
   const out = loginUser(email, password);
@@ -141,33 +132,12 @@ app.post("/api/auth/register", async (req, res) => {
   res.json({ user: out.user, token: out.token });
 });
 
-app.post("/api/auth/verify-email", (req, res) => {
-  const { token } = req.body || {};
-  const r = verifyEmailWithToken(token);
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json({ ok: true, email: r.email });
-});
-
-app.post("/api/auth/resend-verification", async (req, res) => {
-  const { email } = req.body || {};
-  const r = resendVerificationEmail(email);
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  try {
-    await sendSignupConfirmation(r.email, r.verifyToken);
-  } catch (e) {
-    console.error("[mail]", e);
-    return res.status(500).json({ error: "Impossible d’envoyer l’e-mail." });
-  }
-  res.json({ ok: true });
-});
-
 app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body || {};
   const out = loginUser(email, password);
   if (!out.ok) {
     return res.status(401).json({
       error: out.error,
-      ...(out.needsVerification ? { needsVerification: true } : {}),
     });
   }
   res.json({ user: out.user, token: out.token });
@@ -203,24 +173,13 @@ function requireAuthUser(req, res) {
 
 /** Véhicules enregistrés (SQLite) — conducteur / admin. */
 app.post("/api/vehicles", (req, res) => {
-  const u = requireAuthUser(req, res);
-  if (!u) return;
-  if (u.role !== "driver" && u.role !== "admin") {
-    return res.status(403).json({ error: "Conducteur ou administrateur requis" });
-  }
-  let ownerEmail = u.email;
-  if (u.role === "admin") {
-    const o = String(req.body?.ownerEmail || "")
+  const ownerEmail =
+    String(req.body?.ownerEmail || "").trim().toLowerCase() ||
+    `${String(req.body?.conductorName || "conducteur").trim().toLowerCase()}.${String(
+      req.body?.conductorAftername || "bus"
+    )
       .trim()
-      .toLowerCase();
-    if (!o || !o.includes("@")) {
-      return res.status(400).json({
-        error:
-          "Administrateur : indiquez ownerEmail (e-mail du conducteur propriétaire du bus).",
-      });
-    }
-    ownerEmail = o;
-  }
+      .toLowerCase()}@local`;
   const r = upsertRegisteredVehicle(ownerEmail, req.body || {});
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json(r.vehicle);
@@ -228,31 +187,41 @@ app.post("/api/vehicles", (req, res) => {
 
 /** Mise à jour par id — conducteur (ses bus) ou administrateur (tous). */
 app.put("/api/vehicles/:id", (req, res) => {
-  const u = requireAuthUser(req, res);
-  if (!u) return;
-  if (u.role !== "driver" && u.role !== "admin") {
-    return res.status(403).json({ error: "Conducteur ou administrateur requis" });
-  }
-  const r = updateVehicleById(req.params.id, req.body || {}, u);
+  const r = updateVehicleById(req.params.id, req.body || {}, {
+    email: String(req.body?.ownerEmail || "admin@local"),
+    role: "admin",
+  });
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json(r.vehicle);
 });
 
 app.get("/api/vehicles", (req, res) => {
-  const u = requireAuthUser(req, res);
-  if (!u) return;
-  if (u.role !== "driver" && u.role !== "admin") {
-    return res.status(403).json({ error: "Conducteur ou administrateur requis" });
-  }
-  const all = String(req.query.all || "") === "1" && u.role === "admin";
-  const list = all ? listAllVehicles() : listVehiclesForOwner(u.email);
+  const conductorKey = String(req.query.conductorKey || "").trim().toLowerCase();
+  const list = conductorKey ? listVehiclesForOwner(conductorKey) : listAllVehicles();
   res.json({ vehicles: list });
 });
 
+app.get("/api/bus-service-info", (req, res) => {
+  const lines = String(req.query.lines || "")
+    .split(",")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length) {
+    return res.json({ lines: lines.map(getLineServiceInfo) });
+  }
+  const seen = new Set();
+  const infos = [];
+  for (const v of listAllVehicles()) {
+    const line = String(v.line || "").trim().toUpperCase();
+    if (!line || seen.has(line)) continue;
+    seen.add(line);
+    infos.push(getLineServiceInfo(line));
+  }
+  res.json({ lines: infos.sort((a, b) => a.line.localeCompare(b.line)) });
+});
+
 app.delete("/api/vehicles/:id", (req, res) => {
-  const u = requireAuthUser(req, res);
-  if (!u) return;
-  const r = deleteVehicle(u.email, req.params.id, u.role === "admin");
+  const r = deleteVehicle("admin@local", req.params.id, true);
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true });
 });
@@ -260,6 +229,11 @@ app.delete("/api/vehicles/:id", (req, res) => {
 /** Flotte : position + métadonnées (compte Mon compte ou DRIVER_API_KEY). */
 app.post("/api/driver/heartbeat", (req, res) => {
   if (!assertFleetAccess(req, res)) return;
+  if (!lineIsAvailable(req.body?.line)) {
+    return res.status(409).json({
+      error: "Ligne gelée : elle est marquée non disponible par l’administrateur.",
+    });
+  }
   const r = upsertDriverHeartbeat(req.body || {});
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true, id: r.id });
@@ -292,6 +266,29 @@ app.get("/api/journey-trips", async (req, res) => {
       originLabel,
       destLabel
     );
+    payload.trips = (payload.trips || []).map((trip) => {
+      const busLines = [
+        ...new Set(
+          (trip.legs || [])
+            .filter((leg) => leg.mode === "bus" && leg.line)
+            .map((leg) => String(leg.line).trim().toUpperCase())
+        ),
+      ];
+      const unavailableLines = busLines.filter((line) => !lineIsAvailable(line));
+      const serviceInfos = busLines.map(getLineServiceInfo);
+      const issueInfos = serviceInfos.filter(
+        (info) => !info.available || info.serviceAlert !== "ok" || info.serviceNote
+      );
+      return {
+        ...trip,
+        busLines,
+        serviceAvailable: unavailableLines.length === 0,
+        unavailableLines,
+        serviceInfos,
+        serviceAlert: issueInfos[0]?.serviceAlert || "ok",
+        serviceNote: issueInfos[0]?.serviceNote || "",
+      };
+    });
     res.json(payload);
   } catch (e) {
     res.status(400).json({ error: String(e.message) });

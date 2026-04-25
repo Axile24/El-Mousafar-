@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS registered_vehicles (
   vehicle_code TEXT NOT NULL,
   line TEXT NOT NULL,
   vehicle_type TEXT NOT NULL DEFAULT 'bus',
+  conductor_name TEXT,
+  conductor_aftername TEXT,
+  route_start TEXT,
+  route_end TEXT,
+  seats_total INTEGER,
+  available INTEGER NOT NULL DEFAULT 1,
+  service_alert TEXT,
+  service_note TEXT,
   destination_label TEXT,
   departure_local TEXT,
   arrival_local TEXT,
@@ -66,3 +74,45 @@ function migrateUsersEmailVerification() {
 }
 
 migrateUsersEmailVerification();
+
+/** Plus de confirmation e-mail : activer tous les comptes et effacer les jetons. */
+function migrateDropEmailVerificationPending() {
+  db.prepare(
+    `UPDATE users SET email_verified = 1, verify_token = NULL, verify_expires = NULL
+     WHERE email_verified != 1 OR verify_token IS NOT NULL OR verify_expires IS NOT NULL`
+  ).run();
+}
+
+migrateDropEmailVerificationPending();
+
+function migrateRegisteredVehiclesOperationsFields() {
+  const cols = db.prepare("PRAGMA table_info(registered_vehicles)").all();
+  const names = new Set(cols.map((c) => c.name));
+  const add = (sql) => db.exec(sql);
+  if (!names.has("conductor_name")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN conductor_name TEXT");
+  }
+  if (!names.has("conductor_aftername")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN conductor_aftername TEXT");
+  }
+  if (!names.has("route_start")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN route_start TEXT");
+  }
+  if (!names.has("route_end")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN route_end TEXT");
+  }
+  if (!names.has("seats_total")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN seats_total INTEGER");
+  }
+  if (!names.has("available")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN available INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!names.has("service_alert")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN service_alert TEXT");
+  }
+  if (!names.has("service_note")) {
+    add("ALTER TABLE registered_vehicles ADD COLUMN service_note TEXT");
+  }
+}
+
+migrateRegisteredVehiclesOperationsFields();
