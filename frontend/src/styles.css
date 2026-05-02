@@ -8,7 +8,8 @@
   --muted: #5a7a8a;
   --border: #c5e4f5;
   --shadow: 0 12px 40px rgba(74, 169, 217, 0.12);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  --app-font: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  font-family: var(--app-font);
 }
 
 * {
@@ -20,6 +21,16 @@ body {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
+  font-family: var(--app-font);
+  font-weight: 400;
+}
+
+button,
+input,
+select,
+textarea,
+table {
+  font-family: inherit;
 }
 
 #root {
@@ -1988,4 +1999,1238 @@ html.vt-trip-page #root > .vt-detail-root {
 
 .account-msg--err {
   color: #b32020;
+}
+
+/* Account views: white + dark blue only */
+.account-shell {
+  max-width: 1120px;
+  background: #fff;
+  color: #071d3a;
+}
+
+.account-shell__head {
+  padding: 14px 16px;
+  border: 1px solid rgba(7, 29, 58, 0.16);
+  border-radius: 18px;
+  color: #071d3a;
+}
+
+.account-shell__title,
+.account-shell__back,
+.account-shell__back:hover {
+  color: #071d3a;
+}
+
+.account-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  border: 1px solid rgba(7, 29, 58, 0.14);
+  border-radius: 18px;
+  box-shadow: none;
+  color: #071d3a;
+}
+
+.account-card > .account-intro {
+  flex: 1 1 100%;
+}
+
+.account-card > .account-field {
+  flex: 1 1 220px;
+}
+
+.account-card > .account-btn {
+  flex: 1 1 180px;
+  align-self: flex-end;
+}
+
+.account-card--logged {
+  align-items: stretch;
+}
+
+.account-logged-as {
+  flex: 1 1 360px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(7, 29, 58, 0.14);
+  border-radius: 14px;
+  background: #fff;
+  color: #071d3a;
+}
+
+.account-card--logged > .account-btn--ghost {
+  flex: 0 1 220px;
+  margin-top: 0;
+}
+
+.account-vehicles {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(7, 29, 58, 0.14);
+}
+
+.account-vehicles__title,
+.account-vehicles__hint {
+  flex: 1 1 100%;
+}
+
+.account-vehicles__form {
+  flex: 1 1 360px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 14px;
+  border: 1px solid rgba(7, 29, 58, 0.14);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.account-vehicles__form > .account-field {
+  flex: 1 1 220px;
+  margin-bottom: 0;
+}
+
+.account-vehicles__form > .driver-check--field,
+.account-vehicles__form > .account-btn {
+  flex: 1 1 180px;
+}
+
+.account-lines,
+.account-conducteur-wrap {
+  flex: 1 1 420px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgba(7, 29, 58, 0.14);
+  border-radius: 16px;
+  background: #fff;
+  color: #071d3a;
+}
+
+.account-conducteur-wrap {
+  border-top: 1px solid rgba(7, 29, 58, 0.14);
+}
+
+.account-conducteur-wrap__title,
+.account-vehicles__title,
+.account-lines__title,
+.account-field,
+.account-intro,
+.account-vehicles__hint,
+.account-vehicles__empty,
+.account-vehicles__meta,
+.account-vehicles__id,
+.account-conducteur__intro,
+.account-admin__pending,
+.account-msg,
+.account-msg--ok,
+.account-msg--err {
+  color: #071d3a;
+}
+
+.account-field input,
+.account-field textarea,
+.account-select,
+.driver-field input,
+.driver-select {
+  border: 1px solid rgba(7, 29, 58, 0.2);
+  border-radius: 12px;
+  background: #fff;
+  color: #071d3a;
+}
+
+.account-btn,
+.account-btn--secondary,
+.account-link-btn,
+.driver-btn {
+  background: #071d3a;
+  color: #fff;
+  border: 1px solid #071d3a;
+  border-radius: 12px;
+}
+
+.account-btn--ghost {
+  background: #fff;
+  color: #071d3a;
+  border: 1px solid rgba(7, 29, 58, 0.24);
+}
+
+.account-lines__table-wrap {
+  border: 1px solid rgba(7, 29, 58, 0.12);
+  border-radius: 14px;
+}
+
+.account-lines__table th,
+.account-lines__table td {
+  border-color: rgba(7, 29, 58, 0.12);
+  color: #071d3a;
+}
+
+.account-lines__table thead th,
+.account-lines__row--service td,
+.account-lines__row--frozen td {
+  background: #fff;
+  color: #071d3a;
+}
+
+.account-lines__row--frozen td:not(:last-child) {
+  opacity: 1;
+}
+
+.account-lines__status,
+.account-lines__status--on,
+.account-lines__status--off {
+  background: #071d3a;
+  color: #fff;
+}
+
+.account-lines__availability input,
+.driver-check input {
+  accent-color: #071d3a;
+}
+
+.account-lines__delete,
+.account-vehicles__edit,
+.account-vehicles__new-link,
+.account-vehicles__del {
+  color: #071d3a;
+}
+
+.account-admin-invite__warn,
+.account-admin-invite__ok,
+.account-vehicles__editing {
+  background: #fff;
+  border: 1px solid rgba(7, 29, 58, 0.14);
+  border-radius: 14px;
+  color: #071d3a;
+}
+
+@media (min-width: 760px) {
+  body:has(.account-shell) {
+    background: #fff;
+  }
+
+  .account-shell {
+    width: min(430px, calc(100vw - 32px));
+    max-width: 430px;
+    min-height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
+    margin: 24px auto;
+    overflow-y: auto;
+    border: 1px solid rgba(7, 29, 58, 0.18);
+    border-radius: 28px;
+    box-shadow: 0 18px 45px rgba(7, 29, 58, 0.16);
+  }
+
+  .account-card,
+  .account-vehicles,
+  .account-vehicles__form {
+    flex-direction: column;
+  }
+
+  .account-card > .account-field,
+  .account-card > .account-btn,
+  .account-card--logged > .account-btn--ghost,
+  .account-vehicles__form > .account-field,
+  .account-vehicles__form > .driver-check--field,
+  .account-vehicles__form > .account-btn,
+  .account-lines,
+  .account-conducteur-wrap {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
+@media (max-width: 759px) {
+  .account-shell {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* Account page like the booking/admin tab layout */
+.account-shell {
+  width: min(100%, 980px);
+  max-width: 980px;
+  min-height: 100dvh;
+  padding: 22px 24px 40px;
+  background: #fff;
+}
+
+.account-shell__head {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  margin-bottom: 24px;
+}
+
+.account-shell__title {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.account-shell__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0 4px 10px;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: #071d3a;
+  color: #fff;
+  text-decoration: none;
+}
+
+.account-shell__back:hover {
+  color: #fff;
+}
+
+.account-view-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.account-view-tab {
+  flex: 1;
+  min-height: 36px;
+  border: 1px solid rgba(7, 29, 58, 0.12);
+  border-radius: 10px;
+  background: #fff;
+  color: #071d3a;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-view-tab--active {
+  border-color: rgba(7, 29, 58, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(7, 29, 58, 0.28);
+}
+
+.account-card {
+  padding: 22px 20px;
+  border-color: rgba(7, 29, 58, 0.11);
+  border-radius: 18px;
+}
+
+.account-card__title {
+  flex: 1 1 100%;
+  margin: 0 0 -6px;
+  color: #071d3a;
+  font-size: 1.08rem;
+  font-weight: 900;
+}
+
+.account-intro,
+.account-vehicles__hint {
+  margin-top: 0;
+  font-size: 0.94rem;
+}
+
+.account-vehicles__form,
+.account-lines,
+.account-conducteur-wrap,
+.account-logged-as {
+  border-color: rgba(7, 29, 58, 0.1);
+  border-radius: 16px;
+}
+
+.account-field input,
+.account-field textarea,
+.account-select {
+  min-height: 38px;
+  border-color: rgba(7, 29, 58, 0.12);
+  border-radius: 10px;
+}
+
+.account-btn,
+.account-btn--secondary,
+.account-btn--ghost {
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+@media (min-width: 760px) {
+  .account-shell {
+    width: min(960px, calc(100vw - 48px));
+    max-width: 960px;
+    min-height: 100dvh;
+    max-height: none;
+    margin: 0 auto;
+    overflow: visible;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .account-card,
+  .account-vehicles,
+  .account-vehicles__form {
+    flex-direction: row;
+  }
+
+  .account-card > .account-field,
+  .account-card > .account-btn,
+  .account-vehicles__form > .account-field,
+  .account-vehicles__form > .driver-check--field,
+  .account-vehicles__form > .account-btn {
+    width: auto;
+  }
+
+  .account-lines,
+  .account-conducteur-wrap {
+    width: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .account-shell {
+    padding: 18px 14px 30px;
+  }
+
+  .account-view-tabs {
+    gap: 8px;
+  }
+
+  .account-card {
+    padding: 18px 16px;
+  }
+}
+
+/* Force account/admin/driver into a mobile app layout on every screen. */
+.account-shell {
+  width: min(430px, 100%);
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 18px 14px 30px;
+}
+
+.account-card,
+.account-vehicles,
+.account-vehicles__form {
+  flex-direction: column;
+}
+
+.account-card > .account-field,
+.account-card > .account-btn,
+.account-card--logged > .account-btn--ghost,
+.account-logged-as,
+.account-vehicles__form > .account-field,
+.account-vehicles__form > .driver-check--field,
+.account-vehicles__form > .account-btn,
+.account-lines,
+.account-conducteur-wrap {
+  flex-basis: auto;
+  width: 100%;
+}
+
+.account-logged-as {
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+.account-view-tabs {
+  width: 100%;
+}
+
+.account-view-tab,
+.account-btn,
+.account-btn--secondary,
+.account-btn--ghost {
+  width: 100%;
+}
+
+@media (min-width: 760px) {
+  .account-shell {
+    width: min(430px, calc(100vw - 32px));
+    max-width: 430px;
+    min-height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
+    margin: 24px auto;
+    overflow-y: auto;
+    border: 1px solid rgba(7, 29, 58, 0.14);
+    border-radius: 28px;
+    box-shadow: 0 18px 45px rgba(7, 29, 58, 0.12);
+  }
+
+  .account-card,
+  .account-vehicles,
+  .account-vehicles__form {
+    flex-direction: column;
+  }
+}
+
+.account-lines__table-wrap {
+  overflow: visible;
+}
+
+.account-lines__table {
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0 10px;
+}
+
+.account-lines__table thead {
+  display: none;
+}
+
+.account-lines__table,
+.account-lines__table tbody,
+.account-lines__table tr,
+.account-lines__table td {
+  display: block;
+  width: 100%;
+}
+
+.account-lines__table tr {
+  padding: 12px;
+  border: 1px solid rgba(7, 29, 58, 0.12);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.account-lines__table td {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(7, 29, 58, 0.08);
+  text-align: right;
+}
+
+.account-lines__table td:first-child {
+  border-top: none;
+}
+
+.account-lines__table td::before {
+  flex: 0 0 44%;
+  color: #071d3a;
+  content: "";
+  font-weight: 800;
+  text-align: left;
+}
+
+.account-lines__table td:nth-child(1)::before {
+  content: "Conducteur";
+}
+
+.account-lines__table td:nth-child(2)::before {
+  content: "Bus";
+}
+
+.account-lines__table td:nth-child(3)::before {
+  content: "Ligne";
+}
+
+.account-lines__table td:nth-child(4)::before {
+  content: "Route";
+}
+
+.account-lines__table td:nth-child(5)::before {
+  content: "Statut";
+}
+
+.account-lines__table td:nth-child(6)::before {
+  content: "Info bus";
+}
+
+.account-lines__table td:nth-child(7)::before {
+  content: "Places";
+}
+
+.account-lines__table td:nth-child(8)::before {
+  content: "Horaires";
+}
+
+.account-lines__table td:nth-child(9)::before {
+  content: "Actions";
+}
+
+.account-lines__availability {
+  justify-content: flex-end;
+}
+
+.account-lines__actions {
+  flex-wrap: wrap;
+}
+
+.account-lines__edit,
+.account-lines__delete {
+  border: 1px solid rgba(7, 29, 58, 0.18);
+  border-radius: 10px;
+  background: #fff;
+  color: #071d3a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 7px 9px;
+}
+
+.account-info {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid rgba(7, 29, 58, 0.1);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.account-info__title {
+  margin: 0 0 12px;
+  color: #071d3a;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.account-info__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-info__card {
+  padding: 12px;
+  border: 1px solid rgba(7, 29, 58, 0.12);
+  border-radius: 14px;
+  background: #fff;
+  color: #071d3a;
+}
+
+.account-info__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.account-info__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.account-info__grid div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(7, 29, 58, 0.08);
+}
+
+.account-info__grid dt {
+  flex: 0 0 34%;
+  color: #071d3a;
+  font-weight: 800;
+}
+
+.account-info__grid dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Compact account content so conductor/admin forms fit inside the mobile frame. */
+.account-shell {
+  overflow-x: hidden;
+}
+
+.account-card {
+  gap: 12px;
+  padding: 16px 14px;
+  font-weight: 400;
+}
+
+.account-vehicles {
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.account-vehicles__title {
+  margin-bottom: 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.account-vehicles__hint {
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.account-vehicles__form,
+.account-info,
+.account-lines,
+.account-conducteur-wrap {
+  max-width: 100%;
+  padding: 12px;
+}
+
+.account-vehicles__form {
+  gap: 10px;
+}
+
+.account-field {
+  gap: 3px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.account-field input,
+.account-field textarea,
+.account-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.account-field textarea {
+  min-height: 74px;
+}
+
+.account-logged-as,
+.account-info__card,
+.account-lines__table,
+.account-vehicles__empty {
+  font-weight: 400;
+}
+
+.account-info__title,
+.account-lines__title,
+.account-conducteur-wrap__title {
+  font-weight: 700;
+}
+
+.account-info__top strong,
+.account-info__grid dt,
+.account-lines__table td::before,
+.account-lines__table strong {
+  font-weight: 600;
+}
+
+/* Borderless, tighter mobile account layout. */
+.account-card,
+.account-logged-as,
+.account-vehicles__form,
+.account-info,
+.account-info__card,
+.account-lines,
+.account-conducteur-wrap,
+.account-lines__table-wrap,
+.account-lines__table tr {
+  border: 0;
+  box-shadow: none;
+}
+
+.account-card {
+  padding: 12px 8px;
+}
+
+.account-logged-as {
+  padding: 4px 0;
+}
+
+.account-vehicles {
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 0;
+}
+
+.account-vehicles__form,
+.account-info,
+.account-lines,
+.account-conducteur-wrap {
+  padding: 8px 0;
+}
+
+.account-info__card,
+.account-lines__table tr {
+  padding: 8px 0;
+}
+
+.account-info__list {
+  gap: 8px;
+}
+
+.account-lines__table {
+  border-spacing: 0 8px;
+}
+
+.account-lines__table td {
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.account-info__grid {
+  gap: 6px;
+}
+
+.account-info__grid div {
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.account-lines__edit,
+.account-lines__delete {
+  padding: 6px 8px;
+}
+
+/* Extra compact account form: fit more content in the visible mobile frame. */
+.account-shell {
+  padding: 12px 10px 22px;
+}
+
+.account-shell__head {
+  margin-bottom: 14px;
+  padding: 4px 2px;
+}
+
+.account-view-tabs {
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.account-view-tab {
+  min-height: 34px;
+  font-size: 0.8rem;
+}
+
+.account-card {
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.account-logged-as {
+  font-size: 0.82rem;
+}
+
+.account-vehicles {
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.account-vehicles__title {
+  font-size: 0.92rem;
+}
+
+.account-vehicles__hint {
+  margin-bottom: 4px;
+  font-size: 0.76rem;
+}
+
+.account-vehicles__form {
+  gap: 7px;
+  padding: 4px 0;
+}
+
+.account-field {
+  gap: 2px;
+  font-size: 0.7rem;
+}
+
+.account-field input,
+.account-field textarea,
+.account-select {
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 0.84rem;
+  border-radius: 9px;
+}
+
+.account-field textarea {
+  min-height: 58px;
+}
+
+.driver-check--field {
+  min-height: 30px;
+  font-size: 0.76rem;
+}
+
+/* Use two compact columns for short fields so the full form fits better. */
+.account-vehicles__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 8px;
+  row-gap: 6px;
+}
+
+.account-vehicles__form > .account-field,
+.account-vehicles__form > .driver-check--field,
+.account-vehicles__form > .account-btn {
+  width: 100%;
+  min-width: 0;
+}
+
+.account-vehicles__form > .account-field:nth-child(5),
+.account-vehicles__form > .account-field:nth-child(6),
+.account-vehicles__form > .account-field:nth-child(12) {
+  grid-column: 1 / -1;
+}
+
+.account-field input,
+.account-field textarea,
+.account-select {
+  min-width: 0;
+}
+
+.account-field input[type="datetime-local"] {
+  font-size: 0.76rem;
+  padding-left: 7px;
+  padding-right: 7px;
+}
+
+.app-shell,
+.vt-trip-page,
+.driver-page,
+.account-shell {
+  font-family: var(--app-font);
+}
+
+.account-conducteur,
+.driver-card,
+.driver-field,
+.driver-field input,
+.driver-select,
+.driver-check,
+.driver-btn {
+  font-family: var(--app-font);
+}
+
+.driver-field {
+  gap: 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.driver-field input,
+.driver-select {
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 0.84rem;
+  font-weight: 400;
+  line-height: 1.2;
+  border-radius: 9px;
+}
+
+.driver-field input[type="datetime-local"] {
+  font-size: 0.76rem;
+  padding-left: 7px;
+  padding-right: 7px;
+}
+
+.driver-check {
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.driver-btn {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.account-info {
+  font-family: var(--app-font);
+  margin: 12px 10px;
+  width: calc(100% - 20px);
+}
+
+.account-info__title {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.account-info__card {
+  margin: 0 2px 10px;
+  font-size: 0.78rem;
+}
+
+.account-info__top {
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.account-info__top strong {
+  min-width: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.account-info__top .account-lines__status {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  padding: 4px 7px;
+}
+
+.account-info__grid div {
+  align-items: flex-start;
+}
+
+.account-info__grid dt {
+  flex: 0 0 32%;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.account-info__grid dd {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.25;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.account-info__table-wrap {
+  display: block;
+  width: calc(100% - 8px);
+  max-width: calc(100vw - 56px);
+  max-height: 340px;
+  margin: 6px 4px 10px;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  padding-bottom: 8px;
+  border-radius: 10px;
+  touch-action: pan-x pan-y;
+  scrollbar-gutter: stable;
+}
+
+.account-info__table-wrap::-webkit-scrollbar {
+  height: 9px;
+}
+
+.account-info__table-wrap::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(7, 29, 58, 0.35);
+}
+
+.account-info__table-wrap::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(7, 29, 58, 0.08);
+}
+
+.account-info__table-wrap::after {
+  display: block;
+  margin-top: 6px;
+  color: rgba(7, 29, 58, 0.68);
+  content: "Glissez horizontalement pour voir toutes les colonnes";
+  font-size: 0.68rem;
+  font-weight: 400;
+  text-align: center;
+}
+
+.account-info__table {
+  width: 860px;
+  min-width: 860px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-family: var(--app-font);
+  font-size: 0.58rem;
+  font-weight: 400;
+  color: #071d3a;
+}
+
+.account-info__table th,
+.account-info__table td {
+  padding: 4px 4px;
+  border-bottom: 1px solid rgba(7, 29, 58, 0.1);
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.account-info__table tbody tr {
+  background: #fff8d8;
+}
+
+.account-info__table tbody tr:nth-child(even) {
+  background: #fff4bf;
+}
+
+.account-info__table tbody tr.account-info__row--selected {
+  background: #ffe890;
+}
+
+.account-info__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-weight: 700;
+  background: rgba(7, 29, 58, 0.04);
+}
+
+.account-info__table td:nth-child(5),
+.account-info__table td:nth-child(10) {
+  width: 105px;
+}
+
+.account-info__table td:nth-child(6),
+.account-info__table td:nth-child(7) {
+  width: 68px;
+}
+
+.account-info__table th:nth-child(1),
+.account-info__table td:nth-child(1) {
+  width: 28px;
+}
+
+.account-info__table th:nth-child(2),
+.account-info__table td:nth-child(2) {
+  width: 82px;
+}
+
+.account-info__table th:nth-child(3),
+.account-info__table td:nth-child(3),
+.account-info__table th:nth-child(4),
+.account-info__table td:nth-child(4),
+.account-info__table th:nth-child(8),
+.account-info__table td:nth-child(8) {
+  width: 48px;
+}
+
+.account-info__table th:nth-child(9),
+.account-info__table td:nth-child(9) {
+  width: 92px;
+}
+
+.account-info__table .account-lines__availability {
+  align-items: flex-start;
+  gap: 4px;
+  justify-content: flex-start;
+}
+
+.account-info__table .account-lines__status {
+  font-size: 0.56rem;
+  padding: 2px 5px;
+}
+
+.account-info__line-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: #071d3a;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 3px 4px;
+  text-align: center;
+}
+
+.account-info__crud-hint {
+  color: rgba(7, 29, 58, 0.62);
+  font-size: 0.56rem;
+  line-height: 1.15;
+}
+
+.account-crud-panel {
+  position: sticky;
+  left: 0;
+  bottom: 0;
+  width: min(300px, calc(100vw - 64px));
+  margin: 10px 8px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff8d8;
+  color: #071d3a;
+  box-shadow: 0 -4px 16px rgba(7, 29, 58, 0.08);
+}
+
+.account-crud-panel strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.account-crud-panel__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.account-crud-panel .account-lines__edit,
+.account-crud-panel .account-lines__delete {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+/* Form margins: keep all admin/driver form content away from the frame edges. */
+.account-vehicles__form {
+  margin: 10px 10px 16px;
+  width: calc(100% - 20px);
+}
+
+.account-field,
+.driver-check--field {
+  margin: 2px 0 7px;
+}
+
+.account-vehicles__form > .account-btn {
+  margin-top: 4px;
+}
+
+/* Final account spacing: consistent margins all around while preserving fit. */
+.account-shell {
+  padding: 14px 14px 24px;
+}
+
+.account-card {
+  padding: 10px 8px;
+}
+
+.account-vehicles,
+.account-conducteur-wrap,
+.account-info {
+  margin-left: 8px;
+  margin-right: 8px;
+  width: calc(100% - 16px);
+}
+
+.account-vehicles__form {
+  margin: 10px 8px 16px;
+  width: calc(100% - 16px);
+}
+
+.account-info__table-wrap {
+  width: calc(100% - 12px);
+  max-width: calc(100vw - 72px);
+  margin: 8px 6px 12px;
+}
+
+.account-field input,
+.account-field textarea,
+.account-select,
+.driver-field input,
+.driver-select {
+  max-width: 100%;
 }

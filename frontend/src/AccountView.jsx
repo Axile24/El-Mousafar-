@@ -46,6 +46,43 @@ function blankForm(profile) {
   };
 }
 
+function alertText(alert) {
+  return {
+    ok: "Aucun problème",
+    info: "Information",
+    delay: "Retard",
+    issue: "Problème technique",
+    cancelled: "Bus ne vient pas",
+  }[alert || "ok"];
+}
+
+function shortLocalDate(value) {
+  return value ? String(value).replace("T", " ") : "—";
+}
+
+function vehicleToForm(vehicle) {
+  return {
+    id: vehicle.id,
+    conductorName: vehicle.conductorName || "",
+    conductorAftername: vehicle.conductorAftername || "",
+    vehicleCode: vehicle.vehicleCode || "",
+    line: vehicle.line || "",
+    vehicleType: vehicle.vehicleType || "bus",
+    routeStart: vehicle.routeStart || "",
+    routeEnd: vehicle.routeEnd || "",
+    destinationLabel: vehicle.destinationLabel || vehicle.routeEnd || "",
+    departureLocal: vehicle.departureLocal || "",
+    arrivalLocal: vehicle.arrivalLocal || "",
+    seatsTotal: vehicle.seatsTotal ?? "",
+    available: vehicle.available !== false,
+    serviceAlert: vehicle.serviceAlert || "ok",
+    serviceNote: vehicle.serviceNote || "",
+    ownerEmail:
+      vehicle.ownerEmail ||
+      conductorKey(vehicle.conductorName, vehicle.conductorAftername),
+  };
+}
+
 export default function AccountView() {
   const [profile, setProfile] = useState(() => {
     try {
@@ -63,46 +100,18 @@ export default function AccountView() {
   const [routeEndSuggestions, setRouteEndSuggestions] = useState([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState(null);
 
   const isAdmin = profile?.role === "admin";
   const isDriver = profile?.role === "driver";
+  const selectedVehicle = useMemo(
+    () => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || null,
+    [vehicles, selectedVehicleId]
+  );
   const currentKey = useMemo(
     () => (profile ? conductorKey(profile.name, profile.aftername) : ""),
     [profile]
   );
-  const adminLines = useMemo(() => {
-    const map = new Map();
-    for (const v of vehicles) {
-      const key = String(v.line || "").trim().toUpperCase();
-      if (!key) continue;
-      const row = map.get(key) || {
-        line: key,
-        ids: [],
-        buses: [],
-        routes: new Set(),
-        conductors: new Set(),
-        seats: 0,
-        available: 0,
-        alerts: new Set(),
-        notes: new Set(),
-      };
-      row.ids.push(v.id);
-      row.buses.push(v.vehicleCode);
-      if (v.routeStart || v.routeEnd || v.destinationLabel) {
-        row.routes.add(`${v.routeStart || "—"} → ${v.routeEnd || v.destinationLabel || "—"}`);
-      }
-      if (v.conductorName || v.conductorAftername) {
-        row.conductors.add(`${v.conductorName || ""} ${v.conductorAftername || ""}`.trim());
-      }
-      row.seats += Number(v.seatsTotal || 0);
-      if (v.available) row.available += 1;
-      if (v.serviceAlert && v.serviceAlert !== "ok") row.alerts.add(v.serviceAlert);
-      if (v.serviceNote) row.notes.add(v.serviceNote);
-      map.set(key, row);
-    }
-    return [...map.values()].sort((a, b) => a.line.localeCompare(b.line));
-  }, [vehicles]);
-
   const loadVehicles = useCallback(async () => {
     if (!profile) {
       setVehicles([]);
@@ -170,8 +179,121 @@ export default function AccountView() {
     setForm(blankForm(p));
   }
 
+  function switchView(nextRole) {
+    setErr("");
+    setMsg("");
+    setRoleChoice(nextRole);
+    const p = profile
+      ? { ...profile, role: nextRole }
+      : {
+          role: nextRole,
+          name: name.trim() || (nextRole === "admin" ? "Admin" : "Conducteur"),
+          aftername: aftername.trim() || "",
+        };
+    try {
+      localStorage.setItem("el-mousafar-profile", JSON.stringify(p));
+    } catch {
+      /* ignore */
+    }
+    setProfile(p);
+    setForm(blankForm(p));
+  }
+
   function resetForm() {
     setForm(blankForm(profile));
+  }
+
+  function editVehicle(vehicle) {
+    setErr("");
+    setMsg("");
+    setForm(vehicleToForm(vehicle));
+    document.getElementById("vehicle-form")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function startNewVehicle() {
+    setErr("");
+    setMsg("");
+    setSelectedVehicleId(null);
+    resetForm();
+    document.getElementById("vehicle-form")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  async function deleteVehicleRow(vehicle) {
+    if (
+      !window.confirm(
+        `Supprimer ${vehicle.vehicleCode || "ce bus"} — ligne ${
+          vehicle.line || "sans ligne"
+        } ?`
+      )
+    ) {
+      return;
+    }
+    setErr("");
+    setMsg("");
+    const res = await fetch(apiUrl(`/api/vehicles/${vehicle.id}`), {
+      method: "DELETE",
+    });
+    await readJsonResponse(res);
+    setMsg("Inscription supprimée.");
+    if (form.id === vehicle.id) resetForm();
+    await loadVehicles();
+  }
+
+  async function deleteVehicleLine(vehicle) {
+    const line = String(vehicle.line || "").trim();
+    if (!line) return;
+    const sameLineVehicles = vehicles.filter(
+      (v) => String(v.line || "").trim().toUpperCase() === line.toUpperCase()
+    );
+    if (
+      !window.confirm(
+        `Ta bort hela linje ${line} och ${sameLineVehicles.length} registrerade bus(sar)?`
+      )
+    ) {
+      return;
+    }
+    setErr("");
+    setMsg("");
+    await Promise.all(
+      sameLineVehicles.map(async (v) => {
+        const res = await fetch(apiUrl(`/api/vehicles/${v.id}`), {
+          method: "DELETE",
+        });
+        await readJsonResponse(res);
+      })
+    );
+    setMsg(`Linje ${line} borttagen.`);
+    if (
+      sameLineVehicles.some((v) => v.id === form.id)
+    ) {
+      resetForm();
+    }
+    setSelectedVehicleId(null);
+    await loadVehicles();
+  }
+
+
+  async function toggleVehicleAvailability(vehicle, nextAvailable) {
+    setErr("");
+    setMsg("");
+    const res = await fetch(apiUrl(`/api/vehicles/${vehicle.id}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...vehicle,
+        available: nextAvailable,
+      }),
+    });
+    await readJsonResponse(res);
+    setMsg(
+      `${vehicle.vehicleCode || "Bus"} ${
+        nextAvailable ? "activé comme disponible" : "marqué indisponible"
+      }.`
+    );
+    if (form.id === vehicle.id) {
+      setForm((f) => ({ ...f, available: nextAvailable }));
+    }
+    await loadVehicles();
   }
 
   async function submitVehicle(e) {
@@ -213,78 +335,12 @@ export default function AccountView() {
     await loadVehicles();
   }
 
-  async function deleteLine(line) {
-    const ids = line.ids || [];
-    if (!ids.length) return;
-    if (
-      !window.confirm(
-        `Supprimer la ligne ${line.line} et ses ${ids.length} bus enregistrés ?`
-      )
-    ) {
-      return;
-    }
-    setErr("");
-    setMsg("");
-    await Promise.all(
-      ids.map((id) => fetch(apiUrl(`/api/vehicles/${id}`), { method: "DELETE" }))
-    );
-    setMsg(`Ligne ${line.line} supprimée.`);
-    await loadVehicles();
-  }
-
-  async function toggleLineAvailability(line) {
-    const ids = line.ids || [];
-    if (!ids.length) return;
-    const nextAvailable = line.available === 0;
-    setErr("");
-    setMsg("");
-    await Promise.all(
-      vehicles
-        .filter((v) => ids.includes(v.id))
-        .map((v) =>
-          fetch(apiUrl(`/api/vehicles/${v.id}`), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...v,
-              available: nextAvailable,
-            }),
-          })
-        )
-    );
-    setMsg(
-      `Ligne ${line.line} ${
-        nextAvailable ? "activée comme disponible" : "marquée indisponible"
-      }.`
-    );
-    setForm((f) =>
-      String(f.line || "").trim().toUpperCase() === line.line
-        ? { ...f, available: nextAvailable }
-        : f
-    );
-    await loadVehicles();
-  }
-
   async function setCurrentLineAvailability(nextAvailable) {
     setForm((f) => ({ ...f, available: nextAvailable }));
-    const key = String(form.line || "").trim().toUpperCase();
-    const line = adminLines.find((l) => l.line === key);
-    if (!line || line.ids.length === 0) return;
-    await Promise.all(
-      vehicles
-        .filter((v) => line.ids.includes(v.id))
-        .map((v) =>
-          fetch(apiUrl(`/api/vehicles/${v.id}`), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...v,
-              available: nextAvailable,
-            }),
-          })
-        )
-    );
-    await loadVehicles();
+    if (!form.id) return;
+    const vehicle = vehicles.find((v) => v.id === form.id);
+    if (!vehicle) return;
+    await toggleVehicleAvailability(vehicle, nextAvailable);
   }
 
   return (
@@ -296,23 +352,40 @@ export default function AccountView() {
         </a>
       </header>
 
+      <div className="account-view-tabs" role="tablist" aria-label="Choisir la vue">
+        <button
+          type="button"
+          className={`account-view-tab ${
+            (profile?.role || roleChoice) === "driver" ? "account-view-tab--active" : ""
+          }`}
+          onClick={() => switchView("driver")}
+          role="tab"
+          aria-selected={(profile?.role || roleChoice) === "driver"}
+        >
+          Conducteur
+        </button>
+        <button
+          type="button"
+          className={`account-view-tab ${
+            (profile?.role || roleChoice) === "admin" ? "account-view-tab--active" : ""
+          }`}
+          onClick={() => switchView("admin")}
+          role="tab"
+          aria-selected={(profile?.role || roleChoice) === "admin"}
+        >
+          Admin
+        </button>
+      </div>
+
       {!profile ? (
         <form className="account-card" onSubmit={startProfile}>
+          <h2 className="account-card__title">
+            {roleChoice === "admin" ? "Vue administrateur" : "Vue conducteur"}
+          </h2>
           <p className="account-intro">
             Choisissez votre vue. Pas d’e-mail, pas de confirmation et pas de
             connexion : vous arrivez directement dans l’espace de gestion.
           </p>
-          <label className="account-field">
-            <span>Vue</span>
-            <select
-              className="account-select"
-              value={roleChoice}
-              onChange={(e) => setRoleChoice(e.target.value)}
-            >
-              <option value="driver">Conducteur / driver</option>
-              <option value="admin">Administrateur</option>
-            </select>
-          </label>
           <label className="account-field">
             <span>Nom</span>
             <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -326,24 +399,13 @@ export default function AccountView() {
           </button>
         </form>
       ) : (
-        <div className="account-card account-card--logged">
+        <div
+          className={`account-card account-card--logged account-card--${profile.role}`}
+        >
           <p className="account-logged-as">
             Vue active : <strong>{isAdmin ? "Administrateur" : "Conducteur"}</strong>
             {profile.name ? ` — ${profile.name} ${profile.aftername || ""}` : ""}
           </p>
-          <button
-            type="button"
-            className="account-btn account-btn--ghost"
-            onClick={() => {
-              localStorage.removeItem("el-mousafar-profile");
-              setProfile(null);
-              setVehicles([]);
-              setMsg("");
-              setErr("");
-            }}
-          >
-            Changer de vue
-          </button>
 
           <section className="account-vehicles" id="vehicle-form">
             <h2 className="account-vehicles__title">
@@ -520,88 +582,139 @@ export default function AccountView() {
             </form>
 
             {isAdmin ? (
-              <section className="account-lines">
-                <h3 className="account-lines__title">Toutes les lignes</h3>
-                {adminLines.length ? (
-                  <div className="account-lines__table-wrap">
-                    <table className="account-lines__table">
+              <section className="account-info">
+                <h3 className="account-info__title">Toutes les informations</h3>
+                {vehicles.length ? (
+                  <div className="account-info__table-wrap">
+                    <table className="account-info__table">
                       <thead>
                         <tr>
-                          <th>Ligne</th>
+                          <th>ID</th>
+                          <th>Conducteur</th>
                           <th>Bus</th>
-                          <th>Conducteurs</th>
-                          <th>Routes</th>
+                          <th>Ligne</th>
+                          <th>Route</th>
+                          <th>Dép.</th>
+                          <th>Arr.</th>
+                          <th>Places</th>
                           <th>Statut</th>
                           <th>Info bus</th>
-                          <th>Places</th>
-                          <th>Dispo</th>
-                          <th>Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {adminLines.map((line) => (
+                        {vehicles.map((vehicle) => {
+                          const selected = selectedVehicleId === vehicle.id;
+                          return (
                           <tr
-                            key={line.line}
-                            className={
-                              line.available > 0
-                                ? "account-lines__row--service"
-                                : "account-lines__row--frozen"
-                            }
+                            key={vehicle.id}
+                            className={selected ? "account-info__row--selected" : ""}
                           >
+                            <td>{vehicle.id}</td>
                             <td>
-                              <strong>{line.line}</strong>
+                              {`${vehicle.conductorName || "Conducteur"} ${
+                                vehicle.conductorAftername || ""
+                              }`.trim()}
                             </td>
-                            <td>{line.buses.join(", ")}</td>
-                            <td>{[...line.conductors].join(", ") || "—"}</td>
-                            <td>{[...line.routes].join(" · ") || "—"}</td>
+                            <td>{vehicle.vehicleCode || "—"}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="account-info__line-btn"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedVehicleId(selected ? null : vehicle.id);
+                                }}
+                              >
+                                {vehicle.line || "—"}
+                              </button>
+                            </td>
+                            <td>
+                              {vehicle.routeStart || "—"} →{" "}
+                              {vehicle.routeEnd || vehicle.destinationLabel || "—"}
+                            </td>
+                            <td>{shortLocalDate(vehicle.departureLocal)}</td>
+                            <td>{shortLocalDate(vehicle.arrivalLocal)}</td>
+                            <td>{vehicle.seatsTotal ?? "—"}</td>
                             <td>
                               <label className="account-lines__availability">
                                 <input
                                   type="checkbox"
-                                  checked={line.available > 0}
+                                  checked={vehicle.available !== false}
                                   onChange={() =>
-                                    toggleLineAvailability(line).catch((e) =>
-                                      setErr(String(e.message))
-                                    )
+                                    toggleVehicleAvailability(
+                                      vehicle,
+                                      vehicle.available === false
+                                    ).catch((e) => setErr(String(e.message)))
                                   }
                                 />
                                 <span
                                   className={
-                                    line.available > 0
+                                    vehicle.available !== false
                                       ? "account-lines__status account-lines__status--on"
                                       : "account-lines__status account-lines__status--off"
                                   }
                                 >
-                                  {line.available > 0 ? "Disponible" : "Gelée"}
+                                  {vehicle.available !== false ? "Dispo" : "Gelée"}
                                 </span>
                               </label>
                             </td>
-                            <td>
-                              {[...line.notes][0] ||
-                                ([...line.alerts][0] ? [...line.alerts][0] : "—")}
-                            </td>
-                            <td>{line.seats || "—"}</td>
-                            <td>
-                              {line.available}/{line.buses.length}
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                className="account-lines__delete"
-                                onClick={() =>
-                                  deleteLine(line).catch((e) => setErr(String(e.message)))
-                                }
-                              >
-                                Supprimer
-                              </button>
-                            </td>
+                            <td>{vehicle.serviceNote || alertText(vehicle.serviceAlert)}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
+                    {selectedVehicle ? (
+                      <div className="account-crud-panel">
+                        <strong>
+                          Vald linje {selectedVehicle.line || "—"} ·{" "}
+                          {selectedVehicle.vehicleCode || "—"}
+                        </strong>
+                        <div className="account-crud-panel__buttons">
+                          <button
+                            type="button"
+                            className="account-lines__edit"
+                            onClick={() => editVehicle(selectedVehicle)}
+                          >
+                            Modifiera
+                          </button>
+                          <button
+                            type="button"
+                            className="account-lines__edit"
+                            onClick={startNewVehicle}
+                          >
+                            Lägg till
+                          </button>
+                          <button
+                            type="button"
+                            className="account-lines__delete"
+                            onClick={() =>
+                              deleteVehicleRow(selectedVehicle).catch((e) =>
+                                setErr(String(e.message))
+                              )
+                            }
+                          >
+                            Radera linje
+                          </button>
+                          <button
+                            type="button"
+                            className="account-lines__delete"
+                            onClick={() =>
+                              deleteVehicleLine(selectedVehicle).catch((e) =>
+                                setErr(String(e.message))
+                              )
+                            }
+                          >
+                            Ta bort linje
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
-                  <p className="account-vehicles__empty">Aucune ligne enregistrée.</p>
+                  <p className="account-vehicles__empty">
+                    Aucune information enregistrée pour le moment.
+                  </p>
                 )}
               </section>
             ) : null}
