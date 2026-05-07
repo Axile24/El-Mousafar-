@@ -26,6 +26,21 @@ docker compose up --build
 - Web: `http://localhost:8080`
 - API: `http://localhost:4000`
 
+## Docker Compose (dev, live reload)
+
+API restarts on `backend/src` changes (`node --watch`). Frontend uses Vite HMR on port **5173**.
+
+```bash
+docker compose down
+docker compose -f docker-compose.dev.yml up --build
+```
+
+- UI: `http://localhost:5173` (browser calls API on `localhost:4000` as today)
+- API: `http://localhost:4000`
+
+If you change `frontend/package.json`, remove the dev volume once so dependencies reinstall:  
+`docker compose -f docker-compose.dev.yml down -v` (removes dev MySQL data too) or delete only the `web_dev_node_modules` volume in Docker Desktop.
+
 ## Deploy to Azure Student with GitHub Actions
 
 This repo includes **Deploy El Mousafar to Azure** in `.github/workflows/azure-deploy.yml` (Container Apps + ACR).

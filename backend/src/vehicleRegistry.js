@@ -1,7 +1,7 @@
 import { get, query, run } from "./db.js";
 
 const VEHICLE_COLUMNS = `id, owner_email, vehicle_code, line, vehicle_type,
-  conductor_name, conductor_aftername, route_start, route_end,
+  conductor_name, conductor_aftername, conductor_license, route_start, route_end,
   seats_total, available, service_alert, service_note, destination_label,
   departure_local, arrival_local, updated_at`;
 
@@ -38,6 +38,14 @@ function alertPriority(alert) {
   return { cancelled: 4, issue: 3, delay: 2, info: 1, ok: 0 }[alert] || 0;
 }
 
+function normVehicleCode(s) {
+  return String(s ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase()
+    .slice(0, 64);
+}
+
 function rowToApi(row) {
   if (!row) return null;
   return {
@@ -48,6 +56,7 @@ function rowToApi(row) {
     vehicleType: row.vehicle_type,
     conductorName: row.conductor_name,
     conductorAftername: row.conductor_aftername,
+    conductorLicense: row.conductor_license || "",
     routeStart: row.route_start,
     routeEnd: row.route_end,
     seatsTotal: row.seats_total,
@@ -63,7 +72,7 @@ function rowToApi(row) {
 
 export async function upsertRegisteredVehicle(ownerEmail, v) {
   const owner = normEmail(ownerEmail);
-  const vehicleCode = clamp(v.vehicleCode, 64);
+  const vehicleCode = normVehicleCode(v.vehicleCode);
   const line = clamp(v.line, 64);
   const vehicleType =
     String(v.vehicleType || "bus").toLowerCase() === "taxi" ? "taxi" : "bus";
@@ -71,13 +80,19 @@ export async function upsertRegisteredVehicle(ownerEmail, v) {
     return { ok: false, error: "vehicleCode et line sont requis" };
   }
 
-  const params = {
+  const existing = await get(
+    "SELECT id, owner_email FROM registered_vehicles WHERE vehicle_code = ?",
+    [vehicleCode]
+  );
+
+  const paramsBase = {
     owner,
     code: vehicleCode,
     line,
     type: vehicleType,
     cname: clamp(v.conductorName, 80) || null,
     aftername: clamp(v.conductorAftername, 80) || null,
+    license: clamp(v.conductorLicense, 64) || null,
     routeStart: clamp(v.routeStart, 160) || null,
     routeEnd: clamp(v.routeEnd, 160) || null,
     seats: intOrNull(v.seatsTotal),
@@ -90,38 +105,57 @@ export async function upsertRegisteredVehicle(ownerEmail, v) {
     now: Date.now(),
   };
 
+  if (existing) {
+    if (normEmail(existing.owner_email) !== owner) {
+      return {
+        ok: false,
+        error:
+          "Ce numéro de bus est déjà enregistré. Chaque bus doit avoir un code unique dans toute l’application (ex. BUS-01).",
+      };
+    }
+    await run(
+      `UPDATE registered_vehicles SET
+        line = :line,
+        vehicle_type = :type,
+        conductor_name = :cname,
+        conductor_aftername = :aftername,
+        conductor_license = :license,
+        route_start = :routeStart,
+        route_end = :routeEnd,
+        seats_total = :seats,
+        available = :available,
+        service_alert = :alert,
+        service_note = :note,
+        destination_label = :dest,
+        departure_local = :dep,
+        arrival_local = :arr,
+        updated_at = :now
+      WHERE id = :id`,
+      { ...paramsBase, id: existing.id }
+    );
+    const row = await get(
+      `SELECT ${VEHICLE_COLUMNS} FROM registered_vehicles WHERE id = ?`,
+      [existing.id]
+    );
+    return { ok: true, vehicle: rowToApi(row) };
+  }
+
   await run(
     `INSERT INTO registered_vehicles (
       owner_email, vehicle_code, line, vehicle_type,
-      conductor_name, conductor_aftername, route_start, route_end,
+      conductor_name, conductor_aftername, conductor_license, route_start, route_end,
       seats_total, available, service_alert, service_note,
       destination_label, departure_local, arrival_local, updated_at
     ) VALUES (
-      :owner, :code, :line, :type, :cname, :aftername, :routeStart, :routeEnd,
+      :owner, :code, :line, :type, :cname, :aftername, :license, :routeStart, :routeEnd,
       :seats, :available, :alert, :note, :dest, :dep, :arr, :now
-    )
-    ON DUPLICATE KEY UPDATE
-      line = VALUES(line),
-      vehicle_type = VALUES(vehicle_type),
-      conductor_name = VALUES(conductor_name),
-      conductor_aftername = VALUES(conductor_aftername),
-      route_start = VALUES(route_start),
-      route_end = VALUES(route_end),
-      seats_total = VALUES(seats_total),
-      available = VALUES(available),
-      service_alert = VALUES(service_alert),
-      service_note = VALUES(service_note),
-      destination_label = VALUES(destination_label),
-      departure_local = VALUES(departure_local),
-      arrival_local = VALUES(arrival_local),
-      updated_at = VALUES(updated_at)`,
-    params
+    )`,
+    paramsBase
   );
 
   const row = await get(
-    `SELECT ${VEHICLE_COLUMNS}
-     FROM registered_vehicles WHERE owner_email = ? AND vehicle_code = ?`,
-    [owner, vehicleCode]
+    `SELECT ${VEHICLE_COLUMNS} FROM registered_vehicles WHERE vehicle_code = ?`,
+    [vehicleCode]
   );
   return { ok: true, vehicle: rowToApi(row) };
 }
@@ -171,7 +205,7 @@ export async function getLineServiceInfo(line) {
   }
   const rows = await query(
     `SELECT vehicle_code, available, service_alert, service_note, route_start, route_end,
-            conductor_name, conductor_aftername, departure_local, arrival_local
+            conductor_name, conductor_aftername, conductor_license, departure_local, arrival_local
      FROM registered_vehicles WHERE UPPER(line) = UPPER(?)`,
     [key]
   );
@@ -213,6 +247,7 @@ export async function getLineServiceInfo(line) {
       routeEnd: r.route_end,
       conductorName: r.conductor_name,
       conductorAftername: r.conductor_aftername,
+      conductorLicense: r.conductor_license || "",
       departureLocal: r.departure_local,
       arrivalLocal: r.arrival_local,
     })),
@@ -265,15 +300,16 @@ export async function updateVehicleById(id, patch, actor) {
     return { ok: false, error: "Impossible de changer le propriétaire." };
   }
 
-  let vehicleCode = row.vehicle_code;
+  let vehicleCode = normVehicleCode(row.vehicle_code);
   if (patch.vehicleCode != null && String(patch.vehicleCode).trim()) {
-    vehicleCode = clamp(patch.vehicleCode, 64);
-    if (!isAdmin && vehicleCode !== row.vehicle_code) {
+    const nextCode = normVehicleCode(patch.vehicleCode);
+    if (!isAdmin && nextCode !== vehicleCode) {
       return {
         ok: false,
         error: "Le code véhicule ne peut être modifié que par un administrateur.",
       };
     }
+    vehicleCode = nextCode;
   }
 
   const values = {
@@ -295,6 +331,9 @@ export async function updateVehicleById(id, patch, actor) {
     )
       ? clamp(patch.conductorAftername, 80) || null
       : row.conductor_aftername,
+    conductorLicense: Object.prototype.hasOwnProperty.call(patch, "conductorLicense")
+      ? clamp(patch.conductorLicense, 64) || null
+      : row.conductor_license,
     routeStart: Object.prototype.hasOwnProperty.call(patch, "routeStart")
       ? clamp(patch.routeStart, 160) || null
       : row.route_start,
@@ -333,21 +372,15 @@ export async function updateVehicleById(id, patch, actor) {
     return { ok: false, error: "vehicleCode et line sont requis" };
   }
 
-  if (
-    values.ownerEmail !== normEmail(row.owner_email) ||
-    values.vehicleCode !== row.vehicle_code
-  ) {
-    const clash = await get(
-      `SELECT id FROM registered_vehicles
-       WHERE owner_email = ? AND vehicle_code = ? AND id != ?`,
-      [values.ownerEmail, values.vehicleCode, vid]
-    );
-    if (clash) {
-      return {
-        ok: false,
-        error: "Un véhicule avec ce code existe déjà pour ce conducteur.",
-      };
-    }
+  const clash = await get(
+    `SELECT id FROM registered_vehicles WHERE vehicle_code = ? AND id != ?`,
+    [values.vehicleCode, vid]
+  );
+  if (clash) {
+    return {
+      ok: false,
+      error: "Ce numéro de bus est déjà utilisé. Chaque bus doit avoir un code unique.",
+    };
   }
 
   await run(
@@ -358,6 +391,7 @@ export async function updateVehicleById(id, patch, actor) {
        vehicle_type = :vehicleType,
        conductor_name = :conductorName,
        conductor_aftername = :conductorAftername,
+       conductor_license = :conductorLicense,
        route_start = :routeStart,
        route_end = :routeEnd,
        seats_total = :seatsTotal,

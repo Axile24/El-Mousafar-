@@ -10,13 +10,19 @@ import {
   vehiclesInBounds,
 } from "./algierApi.js";
 import {
-  registerUser,
+  registerSendEmailOtp,
+  verifyRegistrationAndLogin,
+  registerResendOtp,
+  requestPasswordResetOtp,
+  confirmPasswordResetWithOtp,
   loginUser,
   verifyToken,
   logoutToken,
   parseBearer,
   listUsersPublic,
   adminInviteConfigured,
+  createUserAsAdmin,
+  emailDeliveryConfigured,
 } from "./authStore.js";
 import { assertFleetAccess, fleetApiKeyConfigured } from "./fleetAccess.js";
 import {
@@ -33,6 +39,12 @@ import {
   lineIsAvailable,
   getLineServiceInfo,
 } from "./vehicleRegistry.js";
+import {
+  listDrivers,
+  createDriver,
+  updateDriver,
+  deleteDriver,
+} from "./driverDirectory.js";
 import { dbInfo, initDb } from "./db.js";
 
 const app = express();
@@ -54,6 +66,7 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/auth/registration-options", (_req, res) => {
   res.json({
     adminInviteConfigured: adminInviteConfigured(),
+    emailConfigured: emailDeliveryConfigured(),
   });
 });
 
@@ -113,23 +126,105 @@ app.get("/api/vehicle-positions", async (req, res) => {
 });
 
 app.post("/api/auth/register", async (req, res) => {
-  const { email, password, role, adminInviteSecret } = req.body || {};
-  const r = await registerUser({ email, password, role, adminInviteSecret });
+  try {
+    const r = await registerSendEmailOtp(req.body || {});
+    if (!r.ok) {
+      return res.status(400).json({
+        error: r.error,
+        ...(r.emailNotConfigured ? { emailNotConfigured: true } : {}),
+      });
+    }
+    res.json({
+      needsEmailVerification: true,
+      maskedEmail: r.maskedEmail,
+      ...(r.devOtp ? { devOtp: r.devOtp } : {}),
+      emailSimulated: r.emailSimulated,
+    });
+  } catch (e) {
+    console.error("[api/auth/register]", e?.stack || e);
+    res.status(500).json({
+      error:
+        String(process.env.NODE_ENV || "").toLowerCase() === "production"
+          ? "Erreur serveur lors de l’inscription."
+          : String(e?.message || e),
+    });
+  }
+});
+
+app.post("/api/auth/register/verify", async (req, res) => {
+  try {
+    const { email, code } = req.body || {};
+    const out = await verifyRegistrationAndLogin({ email, code });
+    if (!out.ok) {
+      return res.status(out.httpStatus || 400).json({ error: out.error });
+    }
+    res.json({ user: out.user, token: out.token });
+  } catch (e) {
+    console.error("[api/auth/register/verify]", e?.stack || e);
+    res.status(500).json({
+      error:
+        String(process.env.NODE_ENV || "").toLowerCase() === "production"
+          ? "Erreur serveur lors de la confirmation."
+          : String(e?.message || e),
+    });
+  }
+});
+
+app.post("/api/auth/register/resend", async (req, res) => {
+  const { email, password } = req.body || {};
+  const r = await registerResendOtp({ email, password });
   if (!r.ok) {
     return res.status(400).json({
       error: r.error,
-      ...(r.adminInviteMissingOnServer
-        ? { adminInviteMissingOnServer: true }
-        : {}),
+      ...(r.emailNotConfigured ? { emailNotConfigured: true } : {}),
     });
   }
-  const out = await loginUser(email, password);
-  if (!out.ok) {
-    return res
-      .status(500)
-      .json({ error: "Inscription OK mais connexion impossible" });
+  res.json({
+    maskedEmail: r.maskedEmail,
+    ...(r.devOtp ? { devOtp: r.devOtp } : {}),
+    emailSimulated: r.emailSimulated,
+  });
+});
+
+app.post("/api/auth/password-reset/request", async (req, res) => {
+  const { email } = req.body || {};
+  const r = await requestPasswordResetOtp({ email });
+  if (!r.ok) {
+    return res.status(400).json({
+      error: r.error,
+      ...(r.emailNotConfigured ? { emailNotConfigured: true } : {}),
+    });
   }
-  res.json({ user: out.user, token: out.token });
+  res.json({
+    ok: true,
+    maskedEmail: r.maskedEmail,
+    silent: Boolean(r.silent),
+    ...(r.devOtp ? { devOtp: r.devOtp } : {}),
+    emailSimulated: r.emailSimulated,
+  });
+});
+
+app.post("/api/auth/password-reset/confirm", async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body || {};
+    const r = await confirmPasswordResetWithOtp({
+      email,
+      code,
+      newPassword,
+    });
+    if (!r.ok) {
+      return res.status(r.httpStatus || 400).json({ error: r.error });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[api/auth/password-reset/confirm]", e?.stack || e);
+    res.status(500).json({
+      error:
+        String(process.env.NODE_ENV || "").toLowerCase() === "production"
+          ? "Erreur serveur."
+          : String(e?.message || e),
+    });
+  }
 });
 
 app.post("/api/auth/login", async (req, res) => {
@@ -137,7 +232,10 @@ app.post("/api/auth/login", async (req, res) => {
   const out = await loginUser(email, password);
   if (!out.ok) {
     return res.status(401).json({
-      error: out.error,
+      error:
+        out.error ||
+        "Connexion refusée. Vérifiez l’e-mail et le mot de passe.",
+      needsVerification: Boolean(out.needsVerification),
     });
   }
   res.json({ user: out.user, token: out.token });
@@ -160,6 +258,17 @@ app.get("/api/admin/users", async (req, res) => {
     return res.status(403).json({ error: "Administrateur uniquement" });
   }
   res.json({ users: await listUsersPublic() });
+});
+
+app.post("/api/admin/users", async (req, res) => {
+  const u = await verifyToken(parseBearer(req));
+  if (!u || u.role !== "admin") {
+    return res.status(403).json({ error: "Administrateur uniquement" });
+  }
+  const { email, password, role } = req.body || {};
+  const r = await createUserAsAdmin({ email, password, role });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.status(201).json({ ok: true, user: r.user });
 });
 
 async function requireAuthUser(req, res) {
@@ -226,6 +335,29 @@ app.get("/api/bus-service-info", async (req, res) => {
 
 app.delete("/api/vehicles/:id", async (req, res) => {
   const r = await deleteVehicle("admin@local", req.params.id, true);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
+/** Annuaire conducteurs (admin / démo — pas d’auth JWT sur ces routes). */
+app.get("/api/drivers", async (_req, res) => {
+  res.json({ drivers: await listDrivers() });
+});
+
+app.post("/api/drivers", async (req, res) => {
+  const r = await createDriver(req.body || {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r.driver);
+});
+
+app.put("/api/drivers/:id", async (req, res) => {
+  const r = await updateDriver(req.params.id, req.body || {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r.driver);
+});
+
+app.delete("/api/drivers/:id", async (req, res) => {
+  const r = await deleteDriver(req.params.id);
   if (!r.ok) return res.status(400).json({ error: r.error });
   res.json({ ok: true });
 });

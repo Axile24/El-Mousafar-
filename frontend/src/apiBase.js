@@ -1,6 +1,6 @@
 /**
- * Bygg API-URL. Relativ `/api` mot Vite utan proxy ger index.html → JSON-parsefel.
- * På localhost (förutom port 4000 / vanlig prod-webb) pekar vi direkt mot Node-API.
+ * URL de l’API. Priorité : VITE_API_BASE → Vite (5173/4173) en relatif `/api…` (proxy) → sinon 127.0.0.1:4000 en local.
+ * Le proxy Vite doit viser l’API : en Docker dev, VITE_PROXY_API=http://api:4000 sur le service web.
  */
 export function apiUrl(path) {
   const explicit = import.meta.env.VITE_API_BASE;
@@ -10,12 +10,15 @@ export function apiUrl(path) {
 
   if (typeof window !== "undefined") {
     const { hostname, port } = window.location;
+    const p = String(port || "");
+    /** Dev / preview Vite : même origine pour que le proxy atteigne l’API (y compris depuis une IP LAN, ex. téléphone). */
+    if (p === "5173" || p === "4173") {
+      return path;
+    }
     const loopback =
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
       hostname === "[::1]";
-    const p = port || "";
-    /** 8080 = ofta Docker-webb med egen /api-proxy — relativ URL. Övriga lokala portar → API 4000 */
     if (loopback && p && !["4000", "80", "443", "8080"].includes(p)) {
       return `http://127.0.0.1:4000${path}`;
     }

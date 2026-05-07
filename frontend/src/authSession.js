@@ -7,3 +7,19 @@ export function readAuthToken() {
     return "";
   }
 }
+
+export function writeAuthToken(token) {
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, String(token || "").trim());
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearAuthToken() {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}

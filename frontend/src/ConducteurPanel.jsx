@@ -80,7 +80,13 @@ export default function ConducteurPanel() {
     } catch {
       throw new Error(raw.slice(0, 200) || `HTTP ${res.status}`);
     }
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    if (!res.ok)
+      throw new Error(
+        data?.error ||
+          (res.status === 401
+            ? "GPS : connectez-vous (Mon compte) ou saisissez la clé API flotte si le serveur impose DRIVER_API_KEY."
+            : `HTTP ${res.status}`)
+      );
     setMsg(`Position envoyée (${new Date().toLocaleTimeString("fr-FR")})`);
     return data;
   }, [
@@ -172,7 +178,13 @@ export default function ConducteurPanel() {
           } catch {
             throw new Error(raw.slice(0, 120));
           }
-          if (!res.ok) throw new Error(data?.error || res.status);
+          if (!res.ok)
+            throw new Error(
+              data?.error ||
+                (res.status === 401
+                  ? "GPS : session expirée — reconnectez-vous ou utilisez la clé API flotte."
+                  : String(res.status))
+            );
           setMsg(`Auto : ${new Date().toLocaleTimeString("fr-FR")}`);
           setErr("");
         } catch (e) {

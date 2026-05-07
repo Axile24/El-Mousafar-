@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { apiUrl } from "./apiBase.js";
 import ConducteurPanel from "./ConducteurPanel.jsx";
+import { conductorKey } from "./conductorKey.js";
 import { SEED_LOCATION_RESULTS } from "./seedPlaces.js";
+import {
+  clearAuthToken,
+  readAuthToken,
+  writeAuthToken,
+} from "./authSession.js";
 
 async function readJsonResponse(res) {
   const raw = await res.text();
@@ -19,17 +26,12 @@ async function readJsonResponse(res) {
   return data;
 }
 
-function conductorKey(name, aftername) {
-  const n = String(name || "conducteur").trim().toLowerCase() || "conducteur";
-  const a = String(aftername || "bus").trim().toLowerCase() || "bus";
-  return `${n}.${a}@local`;
-}
-
 function blankForm(profile) {
   return {
     id: null,
     conductorName: profile?.name || "",
     conductorAftername: profile?.aftername || "",
+    conductorLicense: "",
     vehicleCode: "BUS-01",
     line: "W15",
     vehicleType: "bus",
@@ -65,6 +67,7 @@ function vehicleToForm(vehicle) {
     id: vehicle.id,
     conductorName: vehicle.conductorName || "",
     conductorAftername: vehicle.conductorAftername || "",
+    conductorLicense: vehicle.conductorLicense || "",
     vehicleCode: vehicle.vehicleCode || "",
     line: vehicle.line || "",
     vehicleType: vehicle.vehicleType || "bus",
@@ -81,6 +84,160 @@ function vehicleToForm(vehicle) {
       vehicle.ownerEmail ||
       conductorKey(vehicle.conductorName, vehicle.conductorAftername),
   };
+}
+
+function AdminFleetTablePanel({
+  vehicles,
+  selectedVehicleId,
+  setSelectedVehicleId,
+  selectedVehicle,
+  onEditVehicle,
+  onStartNewVehicle,
+  deleteVehicleRow,
+  deleteVehicleLine,
+  toggleVehicleAvailability,
+  setErr,
+  density,
+}) {
+  const tableWrapClass =
+    density === "full"
+      ? "account-info__table-wrap account-info__table-wrap--fullscreen"
+      : "account-info__table-wrap";
+  const tableClass =
+    density === "full"
+      ? "account-info__table account-info__table--fullscreen"
+      : "account-info__table";
+
+  if (!vehicles.length) {
+    return (
+      <p className="account-vehicles__empty account-vehicles__empty--fullscreen">
+        Aucune information enregistrée pour le moment.
+      </p>
+    );
+  }
+
+  return (
+    <div className={tableWrapClass}>
+      <table className={tableClass}>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Conducteur</th>
+            <th>Bus</th>
+            <th>Ligne</th>
+            <th>Route</th>
+            <th>Départ estimé</th>
+            <th>Arrivée estimée</th>
+            <th>Places</th>
+            <th>Statut</th>
+            <th>Info bus</th>
+          </tr>
+        </thead>
+        <tbody>
+          {vehicles.map((vehicle) => {
+            const selected = selectedVehicleId === vehicle.id;
+            return (
+              <tr
+                key={vehicle.id}
+                className={selected ? "account-info__row--selected" : ""}
+              >
+                <td>{vehicle.id}</td>
+                <td>
+                  {`${vehicle.conductorName || "Conducteur"} ${
+                    vehicle.conductorAftername || ""
+                  }`.trim()}
+                </td>
+                <td>{vehicle.vehicleCode || "—"}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="account-info__line-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedVehicleId(selected ? null : vehicle.id);
+                    }}
+                  >
+                    {vehicle.line || "—"}
+                  </button>
+                </td>
+                <td>
+                  {vehicle.routeStart || "—"} →{" "}
+                  {vehicle.routeEnd || vehicle.destinationLabel || "—"}
+                </td>
+                <td>{shortLocalDate(vehicle.departureLocal)}</td>
+                <td>{shortLocalDate(vehicle.arrivalLocal)}</td>
+                <td>{vehicle.seatsTotal ?? "—"}</td>
+                <td>
+                  <label className="account-lines__availability">
+                    <input
+                      type="checkbox"
+                      checked={vehicle.available !== false}
+                      onChange={() =>
+                        toggleVehicleAvailability(vehicle, vehicle.available === false).catch(
+                          (e) => setErr(String(e.message))
+                        )
+                      }
+                    />
+                    <span
+                      className={
+                        vehicle.available !== false
+                          ? "account-lines__status account-lines__status--on"
+                          : "account-lines__status account-lines__status--off"
+                      }
+                    >
+                      {vehicle.available !== false ? "Dispo" : "Gelée"}
+                    </span>
+                  </label>
+                </td>
+                <td>{vehicle.serviceNote || alertText(vehicle.serviceAlert)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {selectedVehicle ? (
+        <div className="account-crud-panel">
+          <strong>
+            Vald linje {selectedVehicle.line || "—"} · {selectedVehicle.vehicleCode || "—"}
+          </strong>
+          <div className="account-crud-panel__buttons">
+            <button
+              type="button"
+              className="account-lines__edit"
+              onClick={() => onEditVehicle(selectedVehicle)}
+            >
+              Modifiera
+            </button>
+            <button
+              type="button"
+              className="account-lines__edit"
+              onClick={() => onStartNewVehicle()}
+            >
+              Lägg till
+            </button>
+            <button
+              type="button"
+              className="account-lines__delete"
+              onClick={() =>
+                deleteVehicleRow(selectedVehicle).catch((e) => setErr(String(e.message)))
+              }
+            >
+              Radera linje
+            </button>
+            <button
+              type="button"
+              className="account-lines__delete"
+              onClick={() =>
+                deleteVehicleLine(selectedVehicle).catch((e) => setErr(String(e.message)))
+              }
+            >
+              Ta bort linje
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function AccountView() {
@@ -101,9 +258,40 @@ export default function AccountView() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
+  const [fleetFullOpen, setFleetFullOpen] = useState(false);
+  const [drivers, setDrivers] = useState([]);
+  const [driverDirForm, setDriverDirForm] = useState({
+    id: null,
+    name: "",
+    aftername: "",
+    line: "",
+    licenseNumber: "",
+    phone: "",
+    notes: "",
+  });
+  const [serverUser, setServerUser] = useState(null);
+  const [apiUsers, setApiUsers] = useState([]);
+  const [regOptions, setRegOptions] = useState({
+    emailConfigured: false,
+  });
+  const [apiAuthTab, setApiAuthTab] = useState("login");
+  const [apiEmail, setApiEmail] = useState("");
+  const [apiPassword, setApiPassword] = useState("");
+  const [registerPendingVerify, setRegisterPendingVerify] = useState(false);
+  const [apiVerifyCode, setApiVerifyCode] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetCodeSent, setResetCodeSent] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createRole, setCreateRole] = useState("driver");
+  const [apiAuthBanner, setApiAuthBanner] = useState("");
 
   const isAdmin = profile?.role === "admin";
   const isDriver = profile?.role === "driver";
+  const showDriverFleetUi =
+    isDriver && serverUser?.role === "driver";
   const selectedVehicle = useMemo(
     () => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || null,
     [vehicles, selectedVehicleId]
@@ -127,6 +315,334 @@ export default function AccountView() {
   useEffect(() => {
     loadVehicles().catch((e) => setErr(String(e.message)));
   }, [loadVehicles]);
+
+  const loadDrivers = useCallback(async () => {
+    if (!profile || !isAdmin) {
+      setDrivers([]);
+      return;
+    }
+    const res = await fetch(apiUrl("/api/drivers"));
+    const data = await readJsonResponse(res);
+    setDrivers(data.drivers || []);
+  }, [profile, isAdmin]);
+
+  useEffect(() => {
+    loadDrivers().catch((e) => setErr(String(e.message)));
+  }, [loadDrivers]);
+
+  useEffect(() => {
+    if (!fleetFullOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") setFleetFullOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [fleetFullOpen]);
+
+  useEffect(() => {
+    if (!isAdmin) setFleetFullOpen(false);
+  }, [isAdmin]);
+
+  const refreshServerUser = useCallback(async () => {
+    const t = readAuthToken();
+    if (!t) {
+      setServerUser(null);
+      setApiUsers([]);
+      return;
+    }
+    try {
+      const res = await fetch(apiUrl("/api/auth/me"), {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error("session");
+      setServerUser(data.user);
+    } catch {
+      clearAuthToken();
+      setServerUser(null);
+      setApiUsers([]);
+    }
+  }, []);
+
+  const loadApiUsers = useCallback(async () => {
+    const t = readAuthToken();
+    if (!t) return;
+    try {
+      const res = await fetch(apiUrl("/api/admin/users"), {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      const data = await readJsonResponse(res);
+      setApiUsers(data.users || []);
+    } catch {
+      setApiUsers([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/auth/registration-options"))
+      .then((r) => r.json())
+      .then((d) =>
+        setRegOptions({
+          emailConfigured: Boolean(d?.emailConfigured),
+        })
+      )
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (profile) refreshServerUser();
+  }, [profile, refreshServerUser]);
+
+  useEffect(() => {
+    if (serverUser?.role === "admin") loadApiUsers();
+    else setApiUsers([]);
+  }, [serverUser, loadApiUsers]);
+
+  async function submitApiLogin(e) {
+    e.preventDefault();
+    setApiAuthBanner("");
+    setErr("");
+    try {
+      const res = await fetch(apiUrl("/api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: apiEmail.trim(),
+          password: apiPassword,
+        }),
+      });
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = {};
+      }
+      if (!res.ok) {
+        const needsVerification =
+          data.needsVerification === true ||
+          (typeof data.error === "string" &&
+            /non vérifié|code reçu par e-mail|validez le code/i.test(
+              data.error
+            ));
+        if (res.status === 401 && needsVerification) {
+          setApiAuthTab("register");
+          setRegisterPendingVerify(true);
+          setApiVerifyCode("");
+          setApiAuthBanner(
+            data.error ||
+              "Compte non encore validé : saisissez le code reçu par e-mail, ou utilisez « Renvoyer le code » (mot de passe requis)."
+          );
+          return;
+        }
+        throw new Error(
+          data.error ||
+            (res.status === 401
+              ? "E-mail ou mot de passe incorrect. Si vous venez de créer le compte, validez d’abord le code envoyé par e-mail (onglet « Créer un compte »)."
+              : `HTTP ${res.status}`)
+        );
+      }
+      writeAuthToken(data.token);
+      setServerUser(data.user);
+      setApiPassword("");
+      setApiAuthBanner("Connecté au serveur (jeton enregistré).");
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
+
+  async function submitApiRegister(e) {
+    e.preventDefault();
+    setApiAuthBanner("");
+    setErr("");
+    try {
+      const body = {
+        email: apiEmail.trim(),
+        password: apiPassword,
+        role: "driver",
+      };
+      const res = await fetch(apiUrl("/api/auth/register"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setRegisterPendingVerify(true);
+      setApiVerifyCode("");
+      const sim = Boolean(data.emailSimulated);
+      if (sim && data.devOtp != null) {
+        setApiAuthBanner(
+          `Aucun envoi SMTP réel (EMAIL_SIMULATE=1 ou SMTP non configuré). Saisissez ce code : ${data.devOtp}`
+        );
+      } else if (sim) {
+        setApiAuthBanner(
+          "Mode simulation e-mail. Définissez SMTP_HOST (et auth si besoin) sur le serveur API, ou EMAIL_SIMULATE=1 pour les essais."
+        );
+      } else {
+        setApiAuthBanner(
+          `Code envoyé à ${data.maskedEmail || "votre adresse"}. Saisissez-le ci-dessous.`
+        );
+      }
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
+
+  async function submitVerifyRegister(e) {
+    e.preventDefault();
+    setApiAuthBanner("");
+    setErr("");
+    try {
+      const res = await fetch(apiUrl("/api/auth/register/verify"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: apiEmail.trim(),
+          code: apiVerifyCode.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      writeAuthToken(data.token);
+      setServerUser(data.user);
+      setRegisterPendingVerify(false);
+      setApiPassword("");
+      setApiVerifyCode("");
+      setApiAuthBanner("Compte confirmé — vous êtes connecté.");
+      if (data.user?.role === "admin") loadApiUsers();
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
+
+  async function submitResendRegisterOtp() {
+    setApiAuthBanner("");
+    try {
+      const res = await fetch(apiUrl("/api/auth/register/resend"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: apiEmail.trim(),
+          password: apiPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const simHint =
+        data.devOtp != null ? ` Code test : ${data.devOtp}.` : "";
+      setApiAuthBanner(`Nouveau code envoyé.${simHint}`);
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
+
+  async function submitPasswordResetRequest(e) {
+    e.preventDefault();
+    setApiAuthBanner("");
+    try {
+      const res = await fetch(apiUrl("/api/auth/password-reset/request"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setResetCodeSent(true);
+      setResetCode("");
+      const simHint =
+        data.devOtp != null ? ` Code (test) : ${data.devOtp}.` : "";
+      if (data.silent || !data.maskedEmail) {
+        setApiAuthBanner(
+          `Si un compte correspond à cette adresse, un e-mail avec le code a été envoyé.${simHint}`
+        );
+      } else {
+        setApiAuthBanner(
+          `Si un compte correspond, un e-mail a été envoyé vers ${data.maskedEmail}.${simHint}`
+        );
+      }
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
+
+  async function submitPasswordResetConfirm(e) {
+    e.preventDefault();
+    setApiAuthBanner("");
+    try {
+      const res = await fetch(apiUrl("/api/auth/password-reset/confirm"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: resetEmail.trim(),
+          code: resetCode.trim(),
+          newPassword: resetNewPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setResetCodeSent(false);
+      setResetNewPassword("");
+      setResetCode("");
+      setApiAuthTab("login");
+      setApiAuthBanner("Mot de passe mis à jour. Vous pouvez vous connecter.");
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
+
+  async function submitApiLogout() {
+    setApiAuthBanner("");
+    const t = readAuthToken();
+    try {
+      if (t) {
+        await fetch(apiUrl("/api/auth/logout"), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${t}` },
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+    clearAuthToken();
+    setServerUser(null);
+    setApiUsers([]);
+    setApiAuthBanner("Déconnecté du serveur.");
+  }
+
+  async function submitCreateApiUser(ev) {
+    ev.preventDefault();
+    setApiAuthBanner("");
+    setErr("");
+    const t = readAuthToken();
+    try {
+      const res = await fetch(apiUrl("/api/admin/users"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${t}`,
+        },
+        body: JSON.stringify({
+          email: createEmail.trim(),
+          password: createPassword,
+          role: createRole,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setCreateEmail("");
+      setCreatePassword("");
+      setApiAuthBanner(`Utilisateur créé : ${data.user?.email || ""}.`);
+      await loadApiUsers();
+    } catch (x) {
+      setApiAuthBanner(String(x.message || x));
+    }
+  }
 
   const loadRouteSuggestions = useCallback(async (q, which) => {
     const text = String(q || "").trim();
@@ -201,6 +717,70 @@ export default function AccountView() {
 
   function resetForm() {
     setForm(blankForm(profile));
+  }
+
+  function resetDriverDirForm() {
+    setDriverDirForm({
+      id: null,
+      name: "",
+      aftername: "",
+      line: "",
+      licenseNumber: "",
+      phone: "",
+      notes: "",
+    });
+  }
+
+  async function submitDriverDirectory(e) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    const body = {
+      name: driverDirForm.name.trim(),
+      aftername: driverDirForm.aftername.trim(),
+      line: driverDirForm.line.trim(),
+      licenseNumber: driverDirForm.licenseNumber.trim(),
+      phone: driverDirForm.phone.trim(),
+      notes: driverDirForm.notes.trim(),
+    };
+    const url = driverDirForm.id
+      ? apiUrl(`/api/drivers/${driverDirForm.id}`)
+      : apiUrl("/api/drivers");
+    const res = await fetch(url, {
+      method: driverDirForm.id ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    await readJsonResponse(res);
+    setMsg(driverDirForm.id ? "Conducteur mis à jour." : "Conducteur ajouté.");
+    resetDriverDirForm();
+    await loadDrivers();
+  }
+
+  async function deleteDriverRow(driver) {
+    if (!window.confirm(`Supprimer ${driver.name} ${driver.aftername || ""} de l’annuaire ?`)) {
+      return;
+    }
+    setErr("");
+    setMsg("");
+    const res = await fetch(apiUrl(`/api/drivers/${driver.id}`), { method: "DELETE" });
+    await readJsonResponse(res);
+    setMsg("Conducteur supprimé.");
+    if (driverDirForm.id === driver.id) resetDriverDirForm();
+    await loadDrivers();
+  }
+
+  function editDriverRow(driver) {
+    setDriverDirForm({
+      id: driver.id,
+      name: driver.name || "",
+      aftername: driver.aftername || "",
+      line: driver.line || "",
+      licenseNumber: driver.licenseNumber || "",
+      phone: driver.phone || "",
+      notes: driver.notes || "",
+    });
+    document.getElementById("driver-directory")?.scrollIntoView({ behavior: "smooth" });
   }
 
   function editVehicle(vehicle) {
@@ -305,6 +885,7 @@ export default function AccountView() {
     const payload = {
       conductorName,
       conductorAftername,
+      conductorLicense: form.conductorLicense.trim(),
       ownerEmail: isAdmin
         ? form.ownerEmail.trim() || conductorKey(conductorName, conductorAftername)
         : currentKey,
@@ -333,6 +914,9 @@ export default function AccountView() {
     setMsg(form.id ? "Bus modifié." : "Bus ajouté.");
     resetForm();
     await loadVehicles();
+    if (isAdmin) {
+      setFleetFullOpen(true);
+    }
   }
 
   async function setCurrentLineAvailability(nextAvailable) {
@@ -400,29 +984,525 @@ export default function AccountView() {
         </form>
       ) : (
         <div
-          className={`account-card account-card--logged account-card--${profile.role}`}
+          className={`account-card account-card--logged account-card--${profile.role}${
+            isDriver && serverUser?.role === "driver"
+              ? " account-card--driver-app"
+              : ""
+          }`}
         >
-          <p className="account-logged-as">
-            Vue active : <strong>{isAdmin ? "Administrateur" : "Conducteur"}</strong>
-            {profile.name ? ` — ${profile.name} ${profile.aftername || ""}` : ""}
-          </p>
+          {!(isDriver && serverUser?.role === "driver") ? (
+            <p className="account-logged-as">
+              Vue active : <strong>{isAdmin ? "Administrateur" : "Conducteur"}</strong>
+              {profile.name ? ` — ${profile.name} ${profile.aftername || ""}` : ""}
+            </p>
+          ) : null}
 
-          <section className="account-vehicles" id="vehicle-form">
-            <h2 className="account-vehicles__title">
-              {isAdmin ? "Admin : bus, lignes et conducteurs" : "Conducteur : mon bus"}
+          {isDriver ? (
+          serverUser?.role === "driver" ? (
+            <>
+              <div
+                className="account-driver-toolbar"
+                aria-label="Session et espace conducteur"
+              >
+                <div className="account-driver-toolbar__main">
+                  <h2 className="account-driver-toolbar__heading">Espace conducteur</h2>
+                  <p className="account-driver-toolbar__profile">
+                    <strong>{isAdmin ? "Administrateur" : "Conducteur"}</strong>
+                    {profile.name
+                      ? ` — ${profile.name} ${profile.aftername || ""}`
+                      : ""}
+                  </p>
+                  <p className="account-driver-toolbar__session">
+                    <strong>{serverUser.email}</strong>
+                    <span className="account-api-auth__role-badge">{serverUser.role}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="account-btn account-btn--ghost account-driver-toolbar__logout"
+                  onClick={() => submitApiLogout()}
+                >
+                  Déconnexion
+                </button>
+              </div>
+              {apiAuthBanner ? (
+                <p className="account-api-auth__banner" role="status">
+                  {apiAuthBanner}
+                </p>
+              ) : null}
+            </>
+          ) : (
+          <section className="account-api-auth" aria-labelledby="account-api-auth-title">
+            <h2 id="account-api-auth-title" className="account-api-auth__title">
+              Créer ton compte
             </h2>
+            <p className="account-api-auth__hint">
+              Connexion avec e-mail et mot de passe.{" "}
+              <strong>Inscription ouverte aux conducteurs uniquement</strong>
+              {regOptions.emailConfigured
+                ? " Après inscription, un code à 6 chiffres est envoyé à votre adresse e-mail pour confirmer le compte."
+                : " L’envoi du code e-mail nécessite SMTP sur le serveur (ou EMAIL_SIMULATE=1 en développement)."}
+            </p>
+            {apiAuthBanner ? (
+              <p className="account-api-auth__banner" role="status">
+                {apiAuthBanner}
+              </p>
+            ) : null}
+            {serverUser ? (
+              <div className="account-api-auth__session">
+                <p className="account-api-auth__session-line">
+                  <strong>{serverUser.email}</strong>
+                  <span className="account-api-auth__role-badge">{serverUser.role}</span>
+                </p>
+                <button
+                  type="button"
+                  className="account-btn account-btn--ghost"
+                  onClick={() => submitApiLogout()}
+                >
+                  Déconnexion API
+                </button>
+                {serverUser.role === "admin" ? (
+                  <div className="account-api-auth__admin">
+                    <h3 className="account-api-auth__subtitle">Créer un utilisateur</h3>
+                    <form className="account-api-auth__form" onSubmit={submitCreateApiUser}>
+                      <label className="account-field">
+                        <span>E-mail</span>
+                        <input
+                          type="email"
+                          value={createEmail}
+                          onChange={(e) => setCreateEmail(e.target.value)}
+                          autoComplete="off"
+                          required
+                        />
+                      </label>
+                      <label className="account-field">
+                        <span>Mot de passe (min. 6)</span>
+                        <input
+                          type="password"
+                          value={createPassword}
+                          onChange={(e) => setCreatePassword(e.target.value)}
+                          autoComplete="new-password"
+                          required
+                          minLength={6}
+                        />
+                      </label>
+                      <label className="account-field">
+                        <span>Rôle</span>
+                        <select
+                          className="account-select"
+                          value={createRole}
+                          onChange={(e) => setCreateRole(e.target.value)}
+                        >
+                          <option value="driver">Conducteur</option>
+                          <option value="admin">Administrateur</option>
+                        </select>
+                      </label>
+                      <button type="submit" className="account-btn account-btn--secondary">
+                        Créer l’utilisateur
+                      </button>
+                    </form>
+                    <h3 className="account-api-auth__subtitle">Utilisateurs enregistrés</h3>
+                    {apiUsers.length ? (
+                      <ul className="account-api-auth__user-list">
+                        {apiUsers.map((u) => (
+                          <li key={u.email}>
+                            <span className="account-api-auth__user-email">{u.email}</span>
+                            <span className="account-api-auth__role-badge">{u.role}</span>
+                            {u.phoneMasked ? (
+                              <span className="account-api-auth__user-phone">{u.phoneMasked}</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="account-api-auth__empty">Aucun compte ou liste non chargée.</p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="account-api-auth__forms">
+                <div className="account-api-auth__tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`account-api-auth__tab ${
+                      apiAuthTab === "login" ? "account-api-auth__tab--active" : ""
+                    }`}
+                    aria-selected={apiAuthTab === "login"}
+                    onClick={() => {
+                      setApiAuthTab("login");
+                      setRegisterPendingVerify(false);
+                    }}
+                  >
+                    Connexion
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`account-api-auth__tab ${
+                      apiAuthTab === "register" ? "account-api-auth__tab--active" : ""
+                    }`}
+                    aria-selected={apiAuthTab === "register"}
+                    onClick={() => {
+                      setApiAuthTab("register");
+                      setRegisterPendingVerify(false);
+                    }}
+                  >
+                    Créer un compte
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`account-api-auth__tab ${
+                      apiAuthTab === "reset" ? "account-api-auth__tab--active" : ""
+                    }`}
+                    aria-selected={apiAuthTab === "reset"}
+                    onClick={() => {
+                      setApiAuthTab("reset");
+                      setResetCodeSent(false);
+                      setRegisterPendingVerify(false);
+                    }}
+                  >
+                    Mot de passe oublié
+                  </button>
+                </div>
+                {apiAuthTab === "login" ? (
+                  <form className="account-api-auth__form" onSubmit={submitApiLogin}>
+                    <label className="account-field">
+                      <span>E-mail</span>
+                      <input
+                        type="email"
+                        value={apiEmail}
+                        onChange={(e) => setApiEmail(e.target.value)}
+                        autoComplete="username"
+                        required
+                      />
+                    </label>
+                    <label className="account-field">
+                      <span>Mot de passe</span>
+                      <input
+                        type="password"
+                        value={apiPassword}
+                        onChange={(e) => setApiPassword(e.target.value)}
+                        autoComplete="current-password"
+                        required
+                      />
+                    </label>
+                    <button type="submit" className="account-btn account-btn--secondary">
+                      Se connecter
+                    </button>
+                  </form>
+                ) : null}
+                {apiAuthTab === "register" && !registerPendingVerify ? (
+                  <form className="account-api-auth__form" onSubmit={submitApiRegister}>
+                    <label className="account-field">
+                      <span>E-mail</span>
+                      <input
+                        type="email"
+                        value={apiEmail}
+                        onChange={(e) => setApiEmail(e.target.value)}
+                        autoComplete="off"
+                        required
+                      />
+                    </label>
+                    <label className="account-field">
+                      <span>Mot de passe (min. 6)</span>
+                      <input
+                        type="password"
+                        value={apiPassword}
+                        onChange={(e) => setApiPassword(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                        minLength={6}
+                      />
+                    </label>
+                    <button type="submit" className="account-btn account-btn--secondary">
+                      Envoyer le code par e-mail
+                    </button>
+                  </form>
+                ) : null}
+                {apiAuthTab === "register" && registerPendingVerify ? (
+                  <form className="account-api-auth__form" onSubmit={submitVerifyRegister}>
+                    <p className="account-api-auth__verify-hint">
+                      Code à 6 chiffres reçu par e-mail pour <strong>{apiEmail}</strong>
+                    </p>
+                    <label className="account-field">
+                      <span>Code reçu par e-mail</span>
+                      <input
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        value={apiVerifyCode}
+                        onChange={(e) => setApiVerifyCode(e.target.value)}
+                        autoComplete="one-time-code"
+                        required
+                      />
+                    </label>
+                    <button type="submit" className="account-btn account-btn--secondary">
+                      Confirmer et ouvrir la session
+                    </button>
+                    <button
+                      type="button"
+                      className="account-btn account-btn--ghost"
+                      onClick={() => submitResendRegisterOtp()}
+                    >
+                      Renvoyer le code
+                    </button>
+                    <button
+                      type="button"
+                      className="account-btn account-btn--ghost"
+                      onClick={() => {
+                        setRegisterPendingVerify(false);
+                        setApiVerifyCode("");
+                      }}
+                    >
+                      Modifier l’inscription
+                    </button>
+                  </form>
+                ) : null}
+                {apiAuthTab === "reset" ? (
+                  <div className="account-api-auth__reset">
+                    {!resetCodeSent ? (
+                      <form
+                        className="account-api-auth__form"
+                        onSubmit={submitPasswordResetRequest}
+                      >
+                        <label className="account-field">
+                          <span>E-mail du compte</span>
+                          <input
+                            type="email"
+                            value={resetEmail}
+                            onChange={(e) => setResetEmail(e.target.value)}
+                            required
+                          />
+                        </label>
+                        <button type="submit" className="account-btn account-btn--secondary">
+                          Envoyer le code par e-mail
+                        </button>
+                      </form>
+                    ) : (
+                      <form
+                        className="account-api-auth__form"
+                        onSubmit={submitPasswordResetConfirm}
+                      >
+                        <label className="account-field">
+                          <span>Code reçu par e-mail</span>
+                          <input
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={6}
+                            value={resetCode}
+                            onChange={(e) => setResetCode(e.target.value)}
+                            required
+                          />
+                        </label>
+                        <label className="account-field">
+                          <span>Nouveau mot de passe (min. 6)</span>
+                          <input
+                            type="password"
+                            value={resetNewPassword}
+                            onChange={(e) => setResetNewPassword(e.target.value)}
+                            minLength={6}
+                            required
+                          />
+                        </label>
+                        <button type="submit" className="account-btn account-btn--secondary">
+                          Enregistrer le nouveau mot de passe
+                        </button>
+                        <button
+                          type="button"
+                          className="account-btn account-btn--ghost"
+                          onClick={() => setResetCodeSent(false)}
+                        >
+                          Retour
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </section>
+          )
+          ) : null}
+
+          {(isAdmin || showDriverFleetUi) ? (
+          <div
+            className={
+              showDriverFleetUi ? "account-driver-workspace" : "account-fleet-slot"
+            }
+          >
+          <section
+            className={`account-vehicles${
+              showDriverFleetUi ? " account-vehicles--driver-main" : ""
+            }`}
+            id="vehicle-form"
+          >
+            <div className="account-vehicles__head">
+              <h2 className="account-vehicles__title">
+                {isAdmin ? "Admin : bus, lignes et conducteurs" : "Conducteur : mon bus"}
+              </h2>
+              {showDriverFleetUi ? (
+                <button
+                  type="button"
+                  className="account-btn account-btn--ghost account-vehicles__logout"
+                  onClick={() => submitApiLogout()}
+                >
+                  Déconnexion
+                </button>
+              ) : null}
+            </div>
             <p className="account-vehicles__hint">
               {isAdmin
-                ? "Vous avez les droits CRUD complets : créer, lire, modifier et supprimer les bus, lignes, routes et conducteurs."
-                : "Ajoutez votre nom, ligne, numéro de bus, départ, arrivée, horaires estimés, disponibilité et nombre de places."}
+                ? "Vous avez les droits CRUD complets : créer, lire, modifier et supprimer les bus, lignes, routes et conducteurs. Plusieurs bus peuvent partager la même ligne ou le même propriétaire ; chaque numéro de bus (code, ex. BUS-01) doit en revanche être unique dans toute l’application."
+                : "Renseignez nom, ligne, numéro de bus, route, horaires, disponibilité et places. Plusieurs bus peuvent utiliser la même ligne ou le même compte ; le numéro de bus (code véhicule) doit être unique dans toute l’application."}
             </p>
 
+            {isAdmin ? (
+              <div className="account-drivers" id="driver-directory">
+                <h3 className="account-drivers__title">Propriétaire de bus / société</h3>
+                <p className="account-drivers__hint">
+                  Annuaire des conducteurs : ligne d’affectation, permis, coordonnées. Sélectionnez une fiche dans le formulaire bus pour remplir nom et prénom.
+                </p>
+                <form className="account-drivers__form" onSubmit={submitDriverDirectory}>
+                  <label className="account-field">
+                    <span>Nom</span>
+                    <input
+                      value={driverDirForm.name}
+                      onChange={(e) =>
+                        setDriverDirForm((d) => ({ ...d, name: e.target.value }))
+                      }
+                      required
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Prénom / après-nom</span>
+                    <input
+                      value={driverDirForm.aftername}
+                      onChange={(e) =>
+                        setDriverDirForm((d) => ({ ...d, aftername: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Numéro de ligne</span>
+                    <input
+                      value={driverDirForm.line}
+                      onChange={(e) =>
+                        setDriverDirForm((d) => ({ ...d, line: e.target.value }))
+                      }
+                      placeholder="ex. W15"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>N° permis de conduire</span>
+                    <input
+                      value={driverDirForm.licenseNumber}
+                      onChange={(e) =>
+                        setDriverDirForm((d) => ({ ...d, licenseNumber: e.target.value }))
+                      }
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Téléphone</span>
+                    <input
+                      value={driverDirForm.phone}
+                      onChange={(e) =>
+                        setDriverDirForm((d) => ({ ...d, phone: e.target.value }))
+                      }
+                      autoComplete="tel"
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Notes</span>
+                    <input
+                      value={driverDirForm.notes}
+                      onChange={(e) =>
+                        setDriverDirForm((d) => ({ ...d, notes: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <div className="account-drivers__form-actions">
+                    <button type="submit" className="account-btn account-btn--secondary">
+                      {driverDirForm.id ? "Enregistrer" : "Ajouter"}
+                    </button>
+                    {driverDirForm.id ? (
+                      <button
+                        type="button"
+                        className="account-btn account-btn--ghost"
+                        onClick={resetDriverDirForm}
+                      >
+                        Nouveau
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
+                {drivers.length ? (
+                  <div className="account-drivers__table-wrap">
+                    <table className="account-drivers__table">
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Nom</th>
+                          <th>Prénom</th>
+                          <th>Ligne</th>
+                          <th>Permis</th>
+                          <th>Tél.</th>
+                          <th>Notes</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {drivers.map((d) => (
+                          <tr key={d.id} className="account-drivers__row">
+                            <td data-label="ID">{d.id}</td>
+                            <td data-label="Nom">{d.name}</td>
+                            <td data-label="Prénom">{d.aftername || "—"}</td>
+                            <td data-label="Ligne">{d.line || "—"}</td>
+                            <td data-label="Permis">{d.licenseNumber || "—"}</td>
+                            <td data-label="Tél.">{d.phone || "—"}</td>
+                            <td data-label="Notes">{d.notes || "—"}</td>
+                            <td className="account-drivers__actions">
+                              <button
+                                type="button"
+                                className="account-lines__edit"
+                                onClick={() => editDriverRow(d)}
+                              >
+                                Modifier
+                              </button>
+                              <button
+                                type="button"
+                                className="account-lines__delete"
+                                onClick={() =>
+                                  deleteDriverRow(d).catch((x) => setErr(String(x.message)))
+                                }
+                              >
+                                Supprimer
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="account-drivers__empty">Aucun conducteur dans l’annuaire.</p>
+                )}
+              </div>
+            ) : null}
+
+            <div className="account-vehicles-body">
             <form className="account-vehicles__form" onSubmit={submitVehicle}>
               <label className="account-field">
                 <span>Nom conducteur</span>
                 <input
                   value={form.conductorName}
-                  onChange={(e) => setForm((f) => ({ ...f, conductorName: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, conductorName: e.target.value }))
+                  }
                   required
                 />
               </label>
@@ -433,6 +1513,16 @@ export default function AccountView() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, conductorAftername: e.target.value }))
                   }
+                />
+              </label>
+              <label className="account-field">
+                <span>N° permis de conduire</span>
+                <input
+                  value={form.conductorLicense}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, conductorLicense: e.target.value }))
+                  }
+                  autoComplete="off"
                 />
               </label>
               <label className="account-field">
@@ -567,168 +1657,90 @@ export default function AccountView() {
                   placeholder="ex. Bus en panne, prochain départ dans 20 min."
                 />
               </label>
-              <button type="submit" className="account-btn account-btn--secondary">
-                {form.id ? "Modifier" : "Créer"}
-              </button>
-              {form.id ? (
-                <button
-                  type="button"
-                  className="account-btn account-btn--ghost"
-                  onClick={resetForm}
-                >
-                  Nouveau
+              <div className="account-form-actions">
+                <button type="submit" className="account-btn account-btn--secondary">
+                  {form.id ? "Modifier" : "Créer"}
                 </button>
-              ) : null}
+                {form.id ? (
+                  <button
+                    type="button"
+                    className="account-btn account-btn--ghost"
+                    onClick={resetForm}
+                  >
+                    Nouveau
+                  </button>
+                ) : null}
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="account-btn account-btn--table-jump"
+                    onClick={() => setFleetFullOpen(true)}
+                  >
+                    Toutes les informations
+                  </button>
+                ) : null}
+              </div>
             </form>
-
-            {isAdmin ? (
-              <section className="account-info">
-                <h3 className="account-info__title">Toutes les informations</h3>
-                {vehicles.length ? (
-                  <div className="account-info__table-wrap">
-                    <table className="account-info__table">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Conducteur</th>
-                          <th>Bus</th>
-                          <th>Ligne</th>
-                          <th>Route</th>
-                          <th>Dép.</th>
-                          <th>Arr.</th>
-                          <th>Places</th>
-                          <th>Statut</th>
-                          <th>Info bus</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {vehicles.map((vehicle) => {
-                          const selected = selectedVehicleId === vehicle.id;
-                          return (
-                          <tr
-                            key={vehicle.id}
-                            className={selected ? "account-info__row--selected" : ""}
-                          >
-                            <td>{vehicle.id}</td>
-                            <td>
-                              {`${vehicle.conductorName || "Conducteur"} ${
-                                vehicle.conductorAftername || ""
-                              }`.trim()}
-                            </td>
-                            <td>{vehicle.vehicleCode || "—"}</td>
-                            <td>
-                              <button
-                                type="button"
-                                className="account-info__line-btn"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSelectedVehicleId(selected ? null : vehicle.id);
-                                }}
-                              >
-                                {vehicle.line || "—"}
-                              </button>
-                            </td>
-                            <td>
-                              {vehicle.routeStart || "—"} →{" "}
-                              {vehicle.routeEnd || vehicle.destinationLabel || "—"}
-                            </td>
-                            <td>{shortLocalDate(vehicle.departureLocal)}</td>
-                            <td>{shortLocalDate(vehicle.arrivalLocal)}</td>
-                            <td>{vehicle.seatsTotal ?? "—"}</td>
-                            <td>
-                              <label className="account-lines__availability">
-                                <input
-                                  type="checkbox"
-                                  checked={vehicle.available !== false}
-                                  onChange={() =>
-                                    toggleVehicleAvailability(
-                                      vehicle,
-                                      vehicle.available === false
-                                    ).catch((e) => setErr(String(e.message)))
-                                  }
-                                />
-                                <span
-                                  className={
-                                    vehicle.available !== false
-                                      ? "account-lines__status account-lines__status--on"
-                                      : "account-lines__status account-lines__status--off"
-                                  }
-                                >
-                                  {vehicle.available !== false ? "Dispo" : "Gelée"}
-                                </span>
-                              </label>
-                            </td>
-                            <td>{vehicle.serviceNote || alertText(vehicle.serviceAlert)}</td>
-                          </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {selectedVehicle ? (
-                      <div className="account-crud-panel">
-                        <strong>
-                          Vald linje {selectedVehicle.line || "—"} ·{" "}
-                          {selectedVehicle.vehicleCode || "—"}
-                        </strong>
-                        <div className="account-crud-panel__buttons">
-                          <button
-                            type="button"
-                            className="account-lines__edit"
-                            onClick={() => editVehicle(selectedVehicle)}
-                          >
-                            Modifiera
-                          </button>
-                          <button
-                            type="button"
-                            className="account-lines__edit"
-                            onClick={startNewVehicle}
-                          >
-                            Lägg till
-                          </button>
-                          <button
-                            type="button"
-                            className="account-lines__delete"
-                            onClick={() =>
-                              deleteVehicleRow(selectedVehicle).catch((e) =>
-                                setErr(String(e.message))
-                              )
-                            }
-                          >
-                            Radera linje
-                          </button>
-                          <button
-                            type="button"
-                            className="account-lines__delete"
-                            onClick={() =>
-                              deleteVehicleLine(selectedVehicle).catch((e) =>
-                                setErr(String(e.message))
-                              )
-                            }
-                          >
-                            Ta bort linje
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="account-vehicles__empty">
-                    Aucune information enregistrée pour le moment.
-                  </p>
-                )}
-              </section>
-            ) : null}
+            </div>
 
           </section>
 
-          {isDriver ? (
+          {showDriverFleetUi ? (
             <div className="account-conducteur-wrap">
               <h2 className="account-conducteur-wrap__title">GPS live</h2>
               <ConducteurPanel />
             </div>
           ) : null}
+          </div>
+          ) : null}
         </div>
       )}
+
+      {fleetFullOpen && isAdmin && profile
+        ? createPortal(
+            <div
+              className="account-fleet-fullscreen"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="account-fleet-full-title"
+            >
+              <header className="account-fleet-fullscreen__head">
+                <h2 id="account-fleet-full-title" className="account-fleet-fullscreen__title">
+                  Toutes les informations
+                </h2>
+                <button
+                  type="button"
+                  className="account-fleet-fullscreen__close account-btn account-btn--ghost"
+                  onClick={() => setFleetFullOpen(false)}
+                >
+                  Fermer
+                </button>
+              </header>
+              <div className="account-fleet-fullscreen__body">
+                <AdminFleetTablePanel
+                  density="full"
+                  vehicles={vehicles}
+                  selectedVehicleId={selectedVehicleId}
+                  setSelectedVehicleId={setSelectedVehicleId}
+                  selectedVehicle={selectedVehicle}
+                  onEditVehicle={(v) => {
+                    setFleetFullOpen(false);
+                    editVehicle(v);
+                  }}
+                  onStartNewVehicle={() => {
+                    setFleetFullOpen(false);
+                    startNewVehicle();
+                  }}
+                  deleteVehicleRow={deleteVehicleRow}
+                  deleteVehicleLine={deleteVehicleLine}
+                  toggleVehicleAvailability={toggleVehicleAvailability}
+                  setErr={setErr}
+                />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {msg && <p className="account-msg account-msg--ok">{msg}</p>}
       {err && <p className="account-msg account-msg--err">{err}</p>}

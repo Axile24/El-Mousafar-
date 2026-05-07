@@ -1,0 +1,75 @@
+# Utveckling med automatisk omstart / HMR:
+#   docker compose -f docker-compose.dev.yml up --build
+# OTP e-mail : en local, simulation par défaut (pas de SMTP requis). Pour un envoi réel : .env avec EMAIL_SIMULATE=0 et SMTP_* .
+#
+# Stoppa prod-stacken först om portarna 3306 / 4000 / 5173 är upptagna:
+#   docker compose down
+#
+# Öppna:  http://localhost:5173  (Vite)  ·  API: http://localhost:4000
+# Ändringar i backend/src → API startas om (node --watch).
+# Ändringar i frontend/src → sidan uppdateras direkt (Vite HMR).
+
+name: vasttrafik-dev
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: mousafar_root
+      MYSQL_DATABASE: el_mousafar
+      MYSQL_USER: mousafar
+      MYSQL_PASSWORD: mousafar_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_dev_data:/var/lib/mysql
+
+  api:
+    build:
+      context: ./backend
+    image: el-mousafar-api:local
+    command: node --watch src/index.js
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: "4000"
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: mousafar
+      MYSQL_PASSWORD: mousafar_password
+      MYSQL_DATABASE: el_mousafar
+      MYSQL_SSL: "false"
+      NODE_ENV: development
+      SEED_DEMO_DATA: "1"
+      # Défaut dev : EMAIL_SIMULATE=1 (code OTP dans la réponse API / logs). Remplacer par 0 + SMTP_* dans .env pour de vrais e-mails.
+      EMAIL_SIMULATE: ${EMAIL_SIMULATE:-1}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SMS_OTP_PEPPER: ${SMS_OTP_PEPPER:-}
+    volumes:
+      - ./backend/src:/app/src
+    depends_on:
+      - mysql
+
+  web:
+    image: node:20-bookworm-slim
+    working_dir: /app
+    environment:
+      # Proxy Vite `/api` → conteneur API (127.0.0.1 dans le conteneur web ne marche pas)
+      VITE_PROXY_API: http://api:4000
+    volumes:
+      - ./frontend:/app
+      - web_dev_node_modules:/app/node_modules
+    command: sh -c "if [ ! -d node_modules/react ]; then npm ci; fi && exec npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  mysql_dev_data:
+  web_dev_node_modules:

@@ -56,6 +56,7 @@ jobs:
           echo "login=$(az acr show -n '${{ vars.AZURE_ACR_NAME }}' --query loginServer -o tsv)" >> "$GITHUB_OUTPUT"
 
       - name: Deploy API Container App
+        # OTP e-mail réel : vars SMTP_* + EMAIL_FROM ; secret SMTP_PASS. Laisser EMAIL_SIMULATE vide ou 0 (définir var repo à 0 pour forcer la prod).
         if: ${{ vars.CONTAINER_APP_API != '' }}
         run: |
           set -eux
@@ -65,6 +66,7 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --image "${{ steps.acr.outputs.login }}/el-mousafar-api:${TAG}" \
             --set-env-vars \
+              NODE_ENV=production \
               PORT=4000 \
               PUBLIC_APP_URL="${{ vars.PUBLIC_APP_URL }}" \
               ADMIN_INVITE_SECRET="${{ secrets.ADMIN_INVITE_SECRET }}" \
@@ -73,7 +75,14 @@ jobs:
               MYSQL_USER="${{ vars.MYSQL_USER }}" \
               MYSQL_PASSWORD="${{ secrets.MYSQL_PASSWORD }}" \
               MYSQL_DATABASE="${{ vars.MYSQL_DATABASE }}" \
-              MYSQL_SSL="${{ vars.MYSQL_SSL }}"
+              MYSQL_SSL="${{ vars.MYSQL_SSL }}" \
+              SMTP_HOST="${{ vars.SMTP_HOST }}" \
+              SMTP_PORT="${{ vars.SMTP_PORT }}" \
+              SMTP_SECURE="${{ vars.SMTP_SECURE }}" \
+              SMTP_USER="${{ vars.SMTP_USER }}" \
+              SMTP_PASS="${{ secrets.SMTP_PASS }}" \
+              EMAIL_FROM="${{ vars.EMAIL_FROM }}" \
+              EMAIL_SIMULATE="${{ vars.EMAIL_SIMULATE || '0' }}"
 
       - name: Deploy Web Container App
         if: ${{ vars.CONTAINER_APP_WEB != '' }}

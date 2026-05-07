@@ -12,6 +12,35 @@
   font-family: var(--app-font);
 }
 
+/* Content column: full width on phones → wider on tablet / desktop web */
+:root {
+  --app-content-max: 100%;
+}
+
+@media (min-width: 480px) {
+  :root {
+    --app-content-max: min(540px, 100%);
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --app-content-max: min(720px, 100%);
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --app-content-max: min(960px, 100%);
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --app-content-max: min(1120px, 100%);
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -43,7 +72,8 @@ table {
 
 .app-shell {
   width: 100%;
-  max-width: 380px;
+  max-width: var(--app-content-max);
+  margin: 0 auto;
 }
 
 /* Telefon/skiss: rundad rektangel, vitt kort */
@@ -91,7 +121,15 @@ table {
 .wire-fields {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 18px;
+}
+
+.wire-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 
 .wire-field input {
@@ -185,14 +223,14 @@ table {
 .btn-wire {
   display: block;
   width: 100%;
-  margin-top: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
+  margin-top: 8px;
+  padding: 7px 11px;
+  border-radius: 8px;
   border: 1px solid var(--accent-strong);
   background: #f5fbff;
   color: var(--accent-strong);
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 
@@ -457,6 +495,8 @@ table {
 #root:has(.vt-shell) {
   display: block;
   padding: 0;
+  width: 100%;
+  max-width: none;
 }
 
 /* Écran trajet : class posée sur <html> par App (voir useLayoutEffect). */
@@ -486,7 +526,7 @@ html.vt-trip-page #root > .vt-detail-root {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  max-width: 440px;
+  max-width: var(--app-content-max);
 }
 
 /* Carte = tout l’espace entre barre et fiche (hauteur garantie) */
@@ -594,7 +634,7 @@ html.vt-trip-page #root > .vt-detail-root {
 .vt-detail-root {
   display: flex;
   flex-direction: column;
-  max-width: 440px;
+  max-width: var(--app-content-max);
   margin: 0 auto;
   background: #e8ecf0;
   width: 100%;
@@ -606,7 +646,8 @@ html.vt-trip-page #root > .vt-detail-root {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 10px
+    max(8px, env(safe-area-inset-left, 0px));
   background: #0067b1;
   color: #fff;
   flex-shrink: 0;
@@ -690,9 +731,9 @@ html.vt-trip-page #root > .vt-detail-root {
   background: none;
   color: #0067b1;
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 3px 0;
 }
 
 .vt-sheet__share {
@@ -831,7 +872,9 @@ html.vt-trip-page #root > .vt-detail-root {
 /* —— Västtrafik-lik sökvy —— */
 .vt-shell {
   min-height: 100vh;
-  max-width: 430px;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: var(--app-content-max);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -843,7 +886,8 @@ html.vt-trip-page #root > .vt-detail-root {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 8px 12px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 12px
+    max(8px, env(safe-area-inset-left, 0px));
   background: #0067b1;
   color: #fff;
   flex-shrink: 0;
@@ -871,11 +915,11 @@ html.vt-trip-page #root > .vt-detail-root {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: #fff;
   cursor: pointer;
@@ -889,10 +933,10 @@ html.vt-trip-page #root > .vt-detail-root {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 0.78rem;
+  min-height: 36px;
+  padding: 0 9px;
+  border-radius: 8px;
+  font-size: 0.72rem;
   font-weight: 700;
   color: #fff;
   text-decoration: none;
@@ -924,23 +968,29 @@ html.vt-trip-page #root > .vt-detail-root {
 }
 
 .vt-search-card__fields {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   min-width: 0;
   padding: 4px 0 4px 14px;
 }
 
 .vt-field {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   padding: 10px 0;
 }
 
 .vt-field__lbl {
-  display: block;
+  flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
   color: #5a6a78;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 4px;
 }
 
 .vt-field__input {
@@ -978,10 +1028,10 @@ html.vt-trip-page #root > .vt-detail-root {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: #2a3f54;
   cursor: pointer;
@@ -1018,8 +1068,8 @@ html.vt-trip-page #root > .vt-detail-root {
   background: #2a3f54;
   color: #fff;
   border-radius: 999px;
-  padding: 5px 9px;
-  font-size: 0.72rem;
+  padding: 4px 8px;
+  font-size: 0.68rem;
   font-weight: 800;
   cursor: pointer;
 }
@@ -1314,12 +1364,15 @@ html.vt-trip-page #root > .vt-detail-root {
 /* —— Conducteur —— */
 .driver-shell {
   min-height: 100vh;
-  max-width: 440px;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: var(--app-content-max);
   margin: 0 auto;
-  padding: 16px 16px 32px;
+  padding: 16px 16px max(32px, env(safe-area-inset-bottom, 0px));
   background: #e8eaed;
   font-family: system-ui, sans-serif;
   color: #1a2836;
+  box-sizing: border-box;
 }
 
 .driver-shell__head {
@@ -1375,6 +1428,10 @@ html.vt-trip-page #root > .vt-detail-root {
 }
 
 .driver-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   background: #fff;
   border-radius: 12px;
   padding: 16px 14px;
@@ -1385,7 +1442,7 @@ html.vt-trip-page #root > .vt-detail-root {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   font-size: 0.78rem;
   font-weight: 700;
   color: #5a6a78;
@@ -1404,24 +1461,24 @@ html.vt-trip-page #root > .vt-detail-root {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 14px 0;
+  margin: 0;
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .driver-actions {
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .driver-btn {
   width: 100%;
-  padding: 12px 14px;
+  padding: 7px 12px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #0067b1;
   color: #fff;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -1447,15 +1504,6 @@ html.vt-trip-page #root > .vt-detail-root {
 }
 
 /* —— Mon compte —— */
-.account-shell {
-  min-height: 100vh;
-  max-width: 520px;
-  margin: 0 auto;
-  padding: 16px 16px 32px;
-  background: #e8eaed;
-  font-family: system-ui, sans-serif;
-  color: #1a2836;
-}
 
 .account-shell__head {
   display: flex;
@@ -1535,10 +1583,10 @@ html.vt-trip-page #root > .vt-detail-root {
 
 .account-tab {
   flex: 1;
-  padding: 10px 12px;
+  padding: 7px 9px;
   border: none;
   background: #f0f3f7;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -1693,13 +1741,13 @@ html.vt-trip-page #root > .vt-detail-root {
 
 .account-btn {
   width: 100%;
-  margin-top: 8px;
-  padding: 12px 14px;
+  margin-top: 5px;
+  padding: 7px 11px;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #0067b1;
   color: #fff;
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -1708,18 +1756,37 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-btn--ghost {
   background: #fff;
   color: #0067b1;
-  border: 2px solid #0067b1;
+  border: 1px solid #0067b1;
+}
+
+.account-btn--table-jump {
+  background: #fff;
+  color: #071d3a;
+  border: 1px solid rgba(7, 29, 58, 0.22);
 }
 
 .account-btn--secondary {
   background: #4a5f73;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .account-vehicles {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid #e4e9ef;
+}
+
+.account-vehicles__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+}
+
+.account-vehicles__head .account-vehicles__title {
+  margin: 0;
 }
 
 .account-vehicles__title {
@@ -1733,6 +1800,241 @@ html.vt-trip-page #root > .vt-detail-root {
   font-size: 0.82rem;
   color: #5a6a78;
   line-height: 1.4;
+}
+
+.account-drivers {
+  margin: 0 0 18px;
+  padding: 12px;
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+  background: #f9fbfd;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.account-drivers__title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.account-drivers__hint {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: #5a6a78;
+  line-height: 1.4;
+}
+
+.account-drivers__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.account-drivers__form .account-field {
+  flex: 1 1 140px;
+  min-width: min(140px, 100%);
+  margin: 0;
+}
+
+.account-drivers__form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 100%;
+  align-items: center;
+}
+
+.account-drivers__table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e4e9ef;
+  background: #fff;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+.account-drivers__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  font-size: 0.76rem;
+}
+
+.account-drivers__table th,
+.account-drivers__table td {
+  padding: 7px 8px;
+  border-top: 1px solid #eef2f6;
+  text-align: left;
+  vertical-align: top;
+}
+
+.account-drivers__table thead th {
+  border-top: none;
+  color: #506271;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.account-drivers__actions {
+  white-space: nowrap;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.account-drivers__empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #778491;
+  line-height: 1.45;
+}
+
+/* Annuaire : une colonne de champs sur téléphone, cartes pour les lignes */
+@media (max-width: 640px) {
+  .account-drivers {
+    padding: 10px 10px 12px;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .account-drivers__form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .account-drivers__form .account-field {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .account-drivers__form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-drivers__form-actions .account-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .account-drivers__table-wrap {
+    overflow-x: visible;
+    touch-action: auto;
+    border: none;
+    background: transparent;
+  }
+
+  .account-drivers__table {
+    min-width: 0;
+    display: block;
+    font-size: 0.8rem;
+  }
+
+  .account-drivers__table thead {
+    display: none;
+  }
+
+  .account-drivers__table tbody {
+    display: block;
+  }
+
+  .account-drivers__table tr.account-drivers__row {
+    display: block;
+    margin-bottom: 10px;
+    padding: 12px 12px 10px;
+    border: 1px solid #dce5ee;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(7, 29, 58, 0.06);
+  }
+
+  .account-drivers__table tr.account-drivers__row:last-child {
+    margin-bottom: 0;
+  }
+
+  .account-drivers__table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 0;
+    border-top: 1px solid #eef2f6;
+    text-align: right;
+    box-sizing: border-box;
+  }
+
+  .account-drivers__table tr.account-drivers__row td:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .account-drivers__table td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #506271;
+    text-align: left;
+    flex: 0 0 38%;
+    min-width: 5.5rem;
+  }
+
+  .account-drivers__table td.account-drivers__actions {
+    flex-direction: column;
+    align-items: stretch;
+    border-top: 1px solid #eef2f6;
+    margin-top: 4px;
+    padding-top: 10px;
+    gap: 8px;
+  }
+
+  .account-drivers__table td.account-drivers__actions::before {
+    content: "Actions";
+    font-weight: 700;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #506271;
+    text-align: left;
+    margin-bottom: 2px;
+  }
+
+  .account-drivers__actions {
+    flex-direction: column;
+    width: 100%;
+    white-space: normal;
+  }
+
+  .account-drivers__actions .account-lines__edit,
+  .account-drivers__actions .account-lines__delete {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  .account-drivers__form .account-field {
+    flex: 1 1 160px;
+  }
+
+  .account-drivers__table {
+    min-width: 580px;
+  }
 }
 
 .account-vehicles__form {
@@ -1947,6 +2249,257 @@ html.vt-trip-page #root > .vt-detail-root {
   font-size: 0.92rem;
 }
 
+.account-api-auth {
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid rgba(7, 29, 58, 0.12);
+  border-radius: 14px;
+  background: #f8fbfe;
+}
+
+.account-api-auth__title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.account-api-auth__hint {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: #5a6a78;
+  line-height: 1.45;
+}
+
+.account-api-auth__banner {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #e8f4fc;
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+
+.account-api-auth__session-line {
+  margin: 0 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-api-auth__role-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--text);
+}
+
+.account-api-auth__subtitle {
+  margin: 16px 0 8px;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.account-api-auth__subtitle:first-of-type {
+  margin-top: 12px;
+}
+
+.account-api-auth__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.account-api-auth__form .account-field {
+  flex: 1 1 180px;
+  min-width: min(180px, 100%);
+  margin: 0;
+}
+
+.account-api-auth__tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.account-api-auth__tab {
+  flex: 1 1 28%;
+  min-width: min(160px, 100%);
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.account-api-auth__tab--active {
+  background: var(--accent-strong);
+  color: #fff;
+  border-color: transparent;
+}
+
+.account-api-auth__user-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+
+.account-api-auth__user-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid #e8eef4;
+}
+
+.account-api-auth__user-list li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.account-api-auth__user-email {
+  flex: 1 1 140px;
+  word-break: break-all;
+}
+
+.account-api-auth__empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #7a8a98;
+}
+
+.account-api-auth__user-phone {
+  font-size: 0.75rem;
+  color: #5a6a78;
+}
+
+.account-api-auth__verify-hint {
+  flex: 1 1 100%;
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  color: #3a4a58;
+  line-height: 1.4;
+}
+
+.account-card--driver-app {
+  flex-direction: column;
+  align-items: stretch;
+  background: linear-gradient(180deg, #f5f8fc 0%, #fff 72px);
+  border-color: rgba(7, 29, 58, 0.1);
+}
+
+.account-driver-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #071d3a;
+  color: #f0f4f9;
+  box-shadow: 0 8px 24px rgba(7, 29, 58, 0.2);
+}
+
+.account-driver-toolbar__main {
+  flex: 1 1 220px;
+  min-width: min(100%, 220px);
+}
+
+.account-driver-toolbar__heading {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.account-driver-toolbar__profile {
+  margin: 0 0 6px;
+  font-size: 0.88rem;
+  color: rgba(240, 244, 249, 0.92);
+  line-height: 1.35;
+}
+
+.account-driver-toolbar__profile strong {
+  color: #fff;
+}
+
+.account-driver-toolbar__session {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.account-driver-toolbar__session strong {
+  color: #fff;
+  word-break: break-all;
+}
+
+.account-driver-toolbar .account-api-auth__role-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.account-driver-toolbar__logout {
+  flex-shrink: 0;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  color: #fff !important;
+}
+
+.account-driver-toolbar__logout:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.account-driver-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.account-fleet-slot {
+  display: contents;
+}
+
+.account-vehicles--driver-main {
+  margin: 0;
+  padding: 16px;
+  border-radius: 16px;
+  border-width: 2px;
+  border-color: rgba(7, 29, 58, 0.14);
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(7, 29, 58, 0.06);
+}
+
+.account-vehicles--driver-main .account-vehicles__title {
+  font-size: 1.15rem;
+}
+
+.account-driver-workspace .account-conducteur-wrap {
+  margin-top: 0;
+  padding: 16px;
+  border-radius: 16px;
+  border: 2px solid rgba(7, 29, 58, 0.12);
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(7, 29, 58, 0.06);
+}
+
 .account-actions-row {
   display: flex;
   flex-direction: column;
@@ -2003,7 +2556,6 @@ html.vt-trip-page #root > .vt-detail-root {
 
 /* Account views: white + dark blue only */
 .account-shell {
-  max-width: 1120px;
   background: #fff;
   color: #071d3a;
 }
@@ -2043,6 +2595,32 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-card > .account-btn {
   flex: 1 1 180px;
   align-self: flex-end;
+}
+
+/* Profil « Entrer » : pile verticale en flex (ordre clair des champs). */
+form.account-card {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 12px;
+}
+
+form.account-card > .account-card__title,
+form.account-card > .account-intro {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+form.account-card > .account-field {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: 0;
+}
+
+form.account-card > .account-btn {
+  flex: 0 0 auto;
+  width: 100%;
+  align-self: stretch;
 }
 
 .account-card--logged {
@@ -2097,9 +2675,32 @@ html.vt-trip-page #root > .vt-detail-root {
   margin-bottom: 0;
 }
 
-.account-vehicles__form > .driver-check--field,
-.account-vehicles__form > .account-btn {
+.account-vehicles__form > .driver-check--field {
   flex: 1 1 180px;
+}
+
+.account-vehicles__form > .account-form-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.account-vehicles__form > .account-form-actions .account-btn,
+.account-vehicles__form > .account-form-actions .account-btn--secondary,
+.account-vehicles__form > .account-form-actions .account-btn--ghost,
+.account-vehicles__form > .account-form-actions .account-btn--table-jump {
+  flex: 1 1 calc(50% - 3px);
+  width: auto;
+  min-width: min(100px, 100%);
+  margin-top: 0;
+}
+
+.account-vehicles__form > .account-form-actions .account-btn:only-of-type {
+  flex: 1 1 100%;
 }
 
 .account-lines,
@@ -2152,7 +2753,7 @@ html.vt-trip-page #root > .vt-detail-root {
   background: #071d3a;
   color: #fff;
   border: 1px solid #071d3a;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .account-btn--ghost {
@@ -2213,37 +2814,7 @@ html.vt-trip-page #root > .vt-detail-root {
 
 @media (min-width: 760px) {
   body:has(.account-shell) {
-    background: #fff;
-  }
-
-  .account-shell {
-    width: min(430px, calc(100vw - 32px));
-    max-width: 430px;
-    min-height: calc(100dvh - 48px);
-    max-height: calc(100dvh - 48px);
-    margin: 24px auto;
-    overflow-y: auto;
-    border: 1px solid rgba(7, 29, 58, 0.18);
-    border-radius: 28px;
-    box-shadow: 0 18px 45px rgba(7, 29, 58, 0.16);
-  }
-
-  .account-card,
-  .account-vehicles,
-  .account-vehicles__form {
-    flex-direction: column;
-  }
-
-  .account-card > .account-field,
-  .account-card > .account-btn,
-  .account-card--logged > .account-btn--ghost,
-  .account-vehicles__form > .account-field,
-  .account-vehicles__form > .driver-check--field,
-  .account-vehicles__form > .account-btn,
-  .account-lines,
-  .account-conducteur-wrap {
-    flex-basis: auto;
-    width: 100%;
+    background: #eef1f5;
   }
 }
 
@@ -2261,11 +2832,16 @@ html.vt-trip-page #root > .vt-detail-root {
 
 /* Account page like the booking/admin tab layout */
 .account-shell {
-  width: min(100%, 980px);
-  max-width: 980px;
+  width: 100%;
+  max-width: var(--app-content-max);
+  margin-left: auto;
+  margin-right: auto;
   min-height: 100dvh;
-  padding: 22px 24px 40px;
+  min-height: 100svh;
+  padding: 22px max(14px, env(safe-area-inset-left, 0px)) max(40px, env(safe-area-inset-bottom, 0px))
+    max(14px, env(safe-area-inset-right, 0px));
   background: #fff;
+  box-sizing: border-box;
 }
 
 .account-shell__head {
@@ -2299,21 +2875,25 @@ html.vt-trip-page #root > .vt-detail-root {
 
 .account-view-tabs {
   display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
 .account-view-tab {
   flex: 1;
-  min-height: 36px;
+  min-height: 2.75rem;
+  padding: 8px 10px;
   border: 1px solid rgba(7, 29, 58, 0.12);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   color: #071d3a;
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   font-weight: 700;
+  line-height: 1.25;
   cursor: pointer;
+  text-align: center;
+  text-wrap: balance;
 }
 
 .account-view-tab--active {
@@ -2360,21 +2940,13 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-btn,
 .account-btn--secondary,
 .account-btn--ghost {
-  min-height: 40px;
-  border-radius: 10px;
+  min-height: 32px;
+  border-radius: 8px;
 }
 
 @media (min-width: 760px) {
   .account-shell {
-    width: min(960px, calc(100vw - 48px));
-    max-width: 960px;
-    min-height: 100dvh;
-    max-height: none;
-    margin: 0 auto;
-    overflow: visible;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
+    padding: 28px max(28px, env(safe-area-inset-left, 0px)) 48px max(28px, env(safe-area-inset-right, 0px));
   }
 
   .account-card,
@@ -2387,12 +2959,16 @@ html.vt-trip-page #root > .vt-detail-root {
   .account-card > .account-btn,
   .account-vehicles__form > .account-field,
   .account-vehicles__form > .driver-check--field,
-  .account-vehicles__form > .account-btn {
+  .account-vehicles__form > .account-form-actions .account-btn {
     width: auto;
   }
 
   .account-lines,
   .account-conducteur-wrap {
+    width: auto;
+  }
+
+  .account-view-tab {
     width: auto;
   }
 }
@@ -2411,14 +2987,6 @@ html.vt-trip-page #root > .vt-detail-root {
   }
 }
 
-/* Force account/admin/driver into a mobile app layout on every screen. */
-.account-shell {
-  width: min(430px, 100%);
-  max-width: 430px;
-  margin: 0 auto;
-  padding: 18px 14px 30px;
-}
-
 .account-card,
 .account-vehicles,
 .account-vehicles__form {
@@ -2431,7 +2999,7 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-logged-as,
 .account-vehicles__form > .account-field,
 .account-vehicles__form > .driver-check--field,
-.account-vehicles__form > .account-btn,
+.account-vehicles__form > .account-form-actions,
 .account-lines,
 .account-conducteur-wrap {
   flex-basis: auto;
@@ -2447,30 +3015,17 @@ html.vt-trip-page #root > .vt-detail-root {
   width: 100%;
 }
 
-.account-view-tab,
-.account-btn,
-.account-btn--secondary,
-.account-btn--ghost {
-  width: 100%;
-}
-
-@media (min-width: 760px) {
-  .account-shell {
-    width: min(430px, calc(100vw - 32px));
-    max-width: 430px;
-    min-height: calc(100dvh - 48px);
-    max-height: calc(100dvh - 48px);
-    margin: 24px auto;
-    overflow-y: auto;
-    border: 1px solid rgba(7, 29, 58, 0.14);
-    border-radius: 28px;
-    box-shadow: 0 18px 45px rgba(7, 29, 58, 0.12);
+@media (max-width: 759px) {
+  .account-view-tab,
+  .account-btn,
+  .account-btn--secondary,
+  .account-btn--ghost {
+    width: 100%;
   }
 
-  .account-card,
-  .account-vehicles,
-  .account-vehicles__form {
-    flex-direction: column;
+  .account-fleet-fullscreen__close.account-btn--ghost {
+    width: auto !important;
+    max-width: max-content;
   }
 }
 
@@ -2571,14 +3126,14 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-lines__edit,
 .account-lines__delete {
   border: 1px solid rgba(7, 29, 58, 0.18);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
   color: #071d3a;
   cursor: pointer;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  padding: 7px 9px;
+  padding: 5px 7px;
 }
 
 .account-info {
@@ -2812,8 +3367,8 @@ html.vt-trip-page #root > .vt-detail-root {
 }
 
 .account-view-tab {
-  min-height: 34px;
-  font-size: 0.8rem;
+  min-height: 30px;
+  font-size: 0.74rem;
 }
 
 .account-card {
@@ -2867,25 +3422,42 @@ html.vt-trip-page #root > .vt-detail-root {
   font-size: 0.76rem;
 }
 
-/* Use two compact columns for short fields so the full form fits better. */
+/* Deux colonnes en flex (wrap) ; routes + textarea sur toute la largeur. */
 .account-vehicles__form {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 8px;
-  row-gap: 6px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 8px;
 }
 
-.account-vehicles__form > .account-field,
-.account-vehicles__form > .driver-check--field,
-.account-vehicles__form > .account-btn {
-  width: 100%;
+.account-vehicles__form > .account-field {
+  flex: 1 1 calc(50% - 4px);
   min-width: 0;
+  margin-bottom: 0;
 }
 
 .account-vehicles__form > .account-field:nth-child(5),
 .account-vehicles__form > .account-field:nth-child(6),
 .account-vehicles__form > .account-field:nth-child(12) {
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.account-vehicles__form > .driver-check--field {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.account-vehicles__form > .account-form-actions .account-btn {
+  flex: 1 1 calc(50% - 3px);
+  min-width: min(100px, 100%);
+}
+
+.account-vehicles__form > .account-form-actions .account-btn:only-of-type {
+  flex: 1 1 100%;
 }
 
 .account-field input,
@@ -3007,22 +3579,22 @@ html.vt-trip-page #root > .vt-detail-root {
 
 .account-info__table-wrap {
   display: block;
-  width: calc(100% - 8px);
-  max-width: calc(100vw - 56px);
-  max-height: 340px;
-  margin: 6px 4px 10px;
+  width: calc(100% - 6px);
+  max-width: calc(100vw - 48px);
+  max-height: 260px;
+  margin: 4px 2px 6px;
   overflow-x: auto;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
-  padding-bottom: 8px;
-  border-radius: 10px;
+  padding-bottom: 4px;
+  border-radius: 8px;
   touch-action: pan-x pan-y;
   scrollbar-gutter: stable;
 }
 
 .account-info__table-wrap::-webkit-scrollbar {
-  height: 9px;
+  height: 7px;
 }
 
 .account-info__table-wrap::-webkit-scrollbar-thumb {
@@ -3037,28 +3609,29 @@ html.vt-trip-page #root > .vt-detail-root {
 
 .account-info__table-wrap::after {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
   color: rgba(7, 29, 58, 0.68);
   content: "Glissez horizontalement pour voir toutes les colonnes";
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 400;
   text-align: center;
 }
 
 .account-info__table {
-  width: 860px;
-  min-width: 860px;
+  width: 720px;
+  min-width: 720px;
   table-layout: fixed;
   border-collapse: collapse;
   font-family: var(--app-font);
-  font-size: 0.58rem;
+  font-size: 0.52rem;
   font-weight: 400;
+  line-height: 1.15;
   color: #071d3a;
 }
 
 .account-info__table th,
 .account-info__table td {
-  padding: 4px 4px;
+  padding: 2px 3px;
   border-bottom: 1px solid rgba(7, 29, 58, 0.1);
   text-align: left;
   vertical-align: top;
@@ -3083,27 +3656,28 @@ html.vt-trip-page #root > .vt-detail-root {
   top: 0;
   z-index: 1;
   font-weight: 700;
+  font-size: 0.5rem;
   background: rgba(7, 29, 58, 0.04);
 }
 
 .account-info__table td:nth-child(5),
 .account-info__table td:nth-child(10) {
-  width: 105px;
+  width: 88px;
 }
 
 .account-info__table td:nth-child(6),
 .account-info__table td:nth-child(7) {
-  width: 68px;
+  width: 56px;
 }
 
 .account-info__table th:nth-child(1),
 .account-info__table td:nth-child(1) {
-  width: 28px;
+  width: 24px;
 }
 
 .account-info__table th:nth-child(2),
 .account-info__table td:nth-child(2) {
-  width: 82px;
+  width: 68px;
 }
 
 .account-info__table th:nth-child(3),
@@ -3112,35 +3686,36 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-info__table td:nth-child(4),
 .account-info__table th:nth-child(8),
 .account-info__table td:nth-child(8) {
-  width: 48px;
+  width: 40px;
 }
 
 .account-info__table th:nth-child(9),
 .account-info__table td:nth-child(9) {
-  width: 92px;
+  width: 76px;
 }
 
 .account-info__table .account-lines__availability {
   align-items: flex-start;
-  gap: 4px;
+  gap: 2px;
   justify-content: flex-start;
 }
 
 .account-info__table .account-lines__status {
-  font-size: 0.56rem;
-  padding: 2px 5px;
+  font-size: 0.5rem;
+  padding: 1px 4px;
 }
 
 .account-info__line-btn {
   width: 100%;
   border: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   background: #071d3a;
   color: #fff;
   cursor: pointer;
   font: inherit;
   font-weight: 700;
-  padding: 3px 4px;
+  font-size: 0.6rem;
+  padding: 1px 2px;
   text-align: center;
 }
 
@@ -3173,15 +3748,317 @@ html.vt-trip-page #root > .vt-detail-root {
 .account-crud-panel__buttons {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .account-crud-panel .account-lines__edit,
 .account-crud-panel .account-lines__delete {
   width: 100%;
-  padding: 8px 10px;
-  font-size: 0.72rem;
+  padding: 6px 8px;
+  font-size: 0.68rem;
   line-height: 1.1;
+}
+
+/* Admin: création form and “Toutes les informations” table in two columns */
+.account-vehicles-body--admin-split {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 22px;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  margin: 0 8px;
+}
+
+.account-vehicles-body--admin-split > .account-vehicles__form {
+  flex: 0 1 320px;
+  max-width: min(480px, 100%);
+  margin: 10px 0 16px;
+  width: auto;
+}
+
+.account-vehicles-body--admin-split .account-info--beside-form {
+  flex: 1 1 400px;
+  min-width: 0;
+  margin: 10px 0 0;
+  width: auto;
+  max-width: none;
+}
+
+.account-fleet-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  min-height: 100svh;
+  background: #fff;
+  color: #071d3a;
+  font-family: var(--app-font);
+  overflow: hidden;
+  /* Rum för hemknapp / notch — head/body fyller på med safe-area */
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+.account-fleet-fullscreen__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid rgba(7, 29, 58, 0.12);
+  background: #f8fafc;
+}
+
+.account-fleet-fullscreen__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.account-fleet-fullscreen__close {
+  flex-shrink: 0;
+  width: auto !important;
+  max-width: max-content;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 10px !important;
+  font-size: 0.72rem !important;
+  line-height: 1.2;
+  margin: 0 !important;
+}
+
+.account-fleet-fullscreen__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 8px 10px 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.account-fleet-fullscreen__body > .account-info__table-wrap--fullscreen {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.account-info__table-wrap--fullscreen {
+  display: block;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 0;
+  border-radius: 0;
+  touch-action: pan-x pan-y;
+}
+
+.account-info__table-wrap--fullscreen::after {
+  display: none;
+}
+
+/* Fullscreen fleet: drop fixed micro-columns so headers and bus codes stay on one line */
+.account-info__table--fullscreen {
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.account-info__table--fullscreen th:nth-child(n),
+.account-info__table--fullscreen td:nth-child(n) {
+  width: auto;
+  max-width: none;
+}
+
+.account-info__table--fullscreen th,
+.account-info__table--fullscreen td {
+  padding: 3px 7px;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  vertical-align: middle;
+}
+
+.account-info__table--fullscreen th {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Wider text columns may wrap instead of breaking every character */
+.account-info__table--fullscreen th:nth-child(2),
+.account-info__table--fullscreen td:nth-child(2) {
+  white-space: normal;
+  max-width: 11rem;
+  line-height: 1.25;
+}
+
+.account-info__table--fullscreen th:nth-child(5),
+.account-info__table--fullscreen td:nth-child(5),
+.account-info__table--fullscreen th:nth-child(10),
+.account-info__table--fullscreen td:nth-child(10) {
+  white-space: normal;
+  max-width: min(22rem, 90vw);
+  line-height: 1.25;
+}
+
+.account-info__table--fullscreen .account-info__line-btn {
+  width: auto;
+  max-width: 100%;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+.account-info__table--fullscreen .account-lines__availability {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.account-info__table--fullscreen .account-lines__status {
+  font-size: 0.58rem;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.account-vehicles__empty--fullscreen {
+  margin: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  text-align: center;
+  line-height: 1.45;
+  max-width: 32rem;
+  width: 100%;
+  align-self: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+}
+
+/* Fullskärmsflottan: mobil & smala skärmar — Fermer förblir liten till höger */
+@media (max-width: 640px) {
+  .account-fleet-fullscreen__head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: max(8px, env(safe-area-inset-top, 0px)) 10px 10px;
+    gap: 8px;
+  }
+
+  .account-fleet-fullscreen__title {
+    font-size: 0.98rem;
+    line-height: 1.25;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .account-fleet-fullscreen__close {
+    padding: 4px 9px !important;
+    font-size: 0.7rem !important;
+    min-height: 32px;
+  }
+
+  .account-fleet-fullscreen__body {
+    padding: 6px 12px max(20px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .account-vehicles__empty--fullscreen {
+    padding: 20px 18px 28px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    max-width: 100%;
+  }
+
+  /* Tabell: mer horisontell yta på mobil (undvik 36vw som blir för smalt) */
+  .account-info__table--fullscreen th:nth-child(5),
+  .account-info__table--fullscreen td:nth-child(5),
+  .account-info__table--fullscreen th:nth-child(10),
+  .account-info__table--fullscreen td:nth-child(10) {
+    max-width: min(20rem, 82vw);
+  }
+
+  .account-info__table--fullscreen th:nth-child(2),
+  .account-info__table--fullscreen td:nth-child(2) {
+    max-width: min(11rem, 48vw);
+  }
+
+  .account-info__table--fullscreen {
+    font-size: 0.66rem;
+  }
+
+  .account-info__table--fullscreen th,
+  .account-info__table--fullscreen td {
+    padding: 5px 6px;
+  }
+
+  .account-info__table-wrap--fullscreen {
+    margin: 0 -2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .account-fleet-fullscreen .account-crud-panel {
+    width: calc(100% - 12px);
+    max-width: none;
+    margin: 10px 6px max(10px, env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 380px) {
+  .account-fleet-fullscreen__title {
+    font-size: 0.9rem;
+  }
+
+  .account-fleet-fullscreen__close {
+    padding: 3px 8px !important;
+    font-size: 0.66rem !important;
+    min-height: 30px;
+  }
+}
+
+.account-vehicles-body--admin-split .account-info__table-wrap {
+  width: 100%;
+  max-width: none;
+  max-height: min(75vh, 600px);
+  margin-left: 0;
+  margin-right: 0;
+}
+
+@media (max-width: 960px) {
+  .account-vehicles-body--admin-split {
+    flex-direction: column;
+  }
+
+  .account-vehicles-body--admin-split > .account-vehicles__form {
+    max-width: none;
+    width: 100%;
+  }
+
+  .account-vehicles-body--admin-split .account-info--beside-form {
+    width: 100%;
+  }
 }
 
 /* Form margins: keep all admin/driver form content away from the frame edges. */
@@ -3195,13 +4072,8 @@ html.vt-trip-page #root > .vt-detail-root {
   margin: 2px 0 7px;
 }
 
-.account-vehicles__form > .account-btn {
+.account-vehicles__form > .account-form-actions .account-btn {
   margin-top: 4px;
-}
-
-/* Final account spacing: consistent margins all around while preserving fit. */
-.account-shell {
-  padding: 14px 14px 24px;
 }
 
 .account-card {
@@ -3222,9 +4094,9 @@ html.vt-trip-page #root > .vt-detail-root {
 }
 
 .account-info__table-wrap {
-  width: calc(100% - 12px);
-  max-width: calc(100vw - 72px);
-  margin: 8px 6px 12px;
+  width: calc(100% - 8px);
+  max-width: calc(100vw - 56px);
+  margin: 4px 4px 8px;
 }
 
 .account-field input,
